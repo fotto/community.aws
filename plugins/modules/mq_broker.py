@@ -12,8 +12,8 @@ module: mq_broker
 version_added: 0.9.0
 short_description: MQ broker configurations except user/config changes
 description:
-    - Get details about a broker
-    - reboot a broker
+  - Get details about a broker
+  - reboot a broker
 author: FCO (frank-christian.otto@web.de)
 requirements:
   - boto3
@@ -23,6 +23,7 @@ options:
     description:
       - "The ID of the MQ broker to work on"
     type: str
+    required: true
   operation:
     description:
       - "Operation to perform: info, reboot"
@@ -31,6 +32,7 @@ options:
 
 extends_documentation_fragment:
 - amazon.aws.aws
+- amazon.aws.ec2
 
 '''
 
@@ -46,7 +48,7 @@ EXAMPLES = '''
 - name: get current broker settings - relying on default operation
   amazon.aws.mq_broker:
     broker_id: "aws-mq-broker-id"
-  register: broker_info 
+  register: broker_info
 - name: request broker reboot - does not wait for reboot to finish
   amazon.aws.mq_broker:
     broker_id: "aws-mq-broker-id"
@@ -60,10 +62,16 @@ broker:
 
 try:
     import botocore
-except ImportError:
-    pass  # Handled by AnsibleAWSModule
+except ImportError as ex:
+    # handled by AnsibleAWSModule
+    pass
 
-from ansible.module_utils.core import AnsibleAWSModule
+# when moving to amazon.aws change import to
+# from ansible.module_utils.core import AnsibleAWSModule
+try:
+    from ansible_collections.amazon.aws.plugins.module_utils.core import AnsibleAWSModule
+except ImportError as ex:
+    raise ex
 
 
 def get_broker_info(conn, module):
@@ -111,8 +119,7 @@ def main():
         module.exit_json(broker=result, changed=changed)
     else:
         module.fail_json_aws(RuntimeError,
-                             msg="Invalid broker operation requested ({}). Valid are: 'info', 'reboot'".format(module.params['operation']))
-
+                             msg="Invalid broker operation requested ({0}). Valid are: 'info', 'reboot'".format(module.params['operation']))
 
 
 if __name__ == '__main__':
