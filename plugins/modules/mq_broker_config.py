@@ -12,8 +12,8 @@ module: mq_broker_config
 version_added: 0.9.0
 short_description: Update broker configuration
 description:
-    - Update configuration for an MQ broker
-    - Optionally allows broker reboot to make changes effective immediately
+  - Update configuration for an MQ broker
+  - Optionally allows broker reboot to make changes effective immediately
 author: FCO (frank-christian.otto@web.de)
 requirements:
   - boto3
@@ -59,16 +59,16 @@ RETURN = '''
 broker:
     description: API response of describe_broker() after changes have been applied
     type: complex
-configuration: 
+configuration:
     description: details about new configuration object
     returned: I(changed=true)
     type: complex
     contains:
-        id: 
+        id:
             description: configuration ID of broker configuration
             type: str
             example: c-386541b8-3139-42c2-9c2c-a4c267c1714f
-        revision: 
+        revision
             description: revision of the configuration that will be active after next reboot
             type: int
             example: 4
@@ -78,27 +78,39 @@ import base64
 import re
 import sys
 IS_PYTHON3 = True
-if sys.version_info.major < 3:
+if sys.hexversion < 34013184:
+    # python2.6 hack
+    IS_PYTHON3 = False
+elif sys.version_info.major < 3:
     IS_PYTHON3 = False
 
 try:
     import botocore
-except ImportError:
-    pass  # Handled by AnsibleAWSModule
+except ImportError as ex:
+    # handled by AnsibleAWSModule
+    pass
 
-from ansible.module_utils.core import AnsibleAWSModule
+try:
+    # use different package reference to make it work in community.aws. original line
+    # from ansible.module_utils.core import AnsibleAWSModule
+    from ansible_collections.amazon.aws.plugins.module_utils.core import AnsibleAWSModule
+except ImportError as ex:
+    raise ex
+
 
 DEFAULTS = {
     'reboot': False
 }
 FULL_DEBUG = False
 
-# we a simple comparision here: strip down spaces and compare the rest
-# TODO: use same XML normalizer on new as used by AWS before comparing strings
+
 def is_same_config(old, new):
-    old_stripped = re.sub('\s+',' ', old, flags=re.S).rstrip()
-    new_stripped = re.sub('\s+',' ', new, flags=re.S).rstrip()
+    # we a simple comparision here: strip down spaces and compare the rest
+    # TODO: use same XML normalizer on new as used by AWS before comparing strings
+    old_stripped = re.sub(r'\s+', ' ', old, flags=re.S).rstrip()
+    new_stripped = re.sub(r'\s+', ' ', new, flags=re.S).rstrip()
     return old_stripped == new_stripped
+
 
 def get_broker_info(conn, module):
     try:
@@ -135,13 +147,14 @@ def create_and_assign_config(conn, module, broker_id, cfg_id, cfg_xml_encoded):
     new_config_revision = c_response['LatestRevision']['Revision']
     try:
         b_response = conn.update_broker(BrokerId=broker_id, Configuration={
-                      'Id': cfg_id,
-                      'Revision': new_config_revision
-                  })
+            'Id': cfg_id,
+            'Revision': new_config_revision
+        })
     except (botocore.exceptions.ClientError, botocore.exceptions.BotoCoreError) as e:
         module.fail_json_aws(e, msg="Couldn't assign new configuration revision to broker.")
     #
     return (c_response, b_response)
+
 
 def reboot_broker(conn, module, broker_id):
     try:
@@ -160,7 +173,8 @@ def ensure_config(conn, module):
     if 'Pending' in broker_info['Configurations']:
         current_cfg = broker_info['Configurations']['Pending']
     current_cfg_encoded = get_current_configuration(conn, module,
-                                            current_cfg['Id'], current_cfg['Revision'])['Data']
+                                                    current_cfg['Id'],
+                                                    current_cfg['Revision'])['Data']
     if IS_PYTHON3:
         current_cfg_decoded = base64.b64decode(current_cfg_encoded.encode()).decode()
     else:
@@ -177,8 +191,10 @@ def ensure_config(conn, module):
                 new_cfg_encoded = base64.b64encode(module.params['config_xml'].encode()).decode()
             else:
                 new_cfg_encoded = base64.b64encode(module.params['config_xml'])
-            (c_response, b_response) = create_and_assign_config(conn, module, broker_id,
-                                     current_cfg['Id'], new_cfg_encoded)
+            (c_response, b_response) = create_and_assign_config(conn, module,
+                                                                broker_id,
+                                                                current_cfg['Id'],
+                                                                new_cfg_encoded)
         #
         changed = True
     #

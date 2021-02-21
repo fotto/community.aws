@@ -12,8 +12,8 @@ module: mq_user_info
 version_added: 0.9.0
 short_description: List users of an Amazon MQ broker
 description:
-    - list users for the specified broker id
-    - Pending creations and deletions can be skipped by options
+  - list users for the specified broker id
+  - Pending creations and deletions can be skipped by options
 author: FCO (frank-christian.otto@web.de)
 requirements:
   - boto3
@@ -75,18 +75,24 @@ EXAMPLES = '''
 RETURN = '''
 user:
     type: complex
-    description: 
+    description:
     - list of users as array or as dict keyed by username (if as_dict=true)
     - each elements/entry are 1:1 those from the 'Users' list in the API response of list_users()
 '''
 
-
 try:
     import botocore
-except ImportError:
-    pass  # Handled by AnsibleAWSModule
+except ImportError as ex:
+    # handled by AnsibleAWSModule
+    pass
 
-from ansible.module_utils.core import AnsibleAWSModule
+try:
+    # use different package reference to make it work in community.aws. original line
+    # from ansible.module_utils.core import AnsibleAWSModule
+    from ansible_collections.amazon.aws.plugins.module_utils.core import AnsibleAWSModule
+except ImportError as ex:
+    raise ex
+
 
 DEFAULTS = {
     'max_results': 100,
@@ -94,10 +100,11 @@ DEFAULTS = {
     'skip_pending_delete': False
 }
 
+
 def get_user_info(conn, module):
     try:
         response = conn.list_users(BrokerId=module.params['broker_id'],
-                            MaxResults=module.params['max_results'])
+                                   MaxResults=module.params['max_results'])
     except (botocore.exceptions.ClientError, botocore.exceptions.BotoCoreError) as e:
         module.fail_json_aws(e, msg='Failed to describe users')
     #
