@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # to have debugging:  export DEGUG="-vv"
-THIS_DIR=$(dirname $0)
+THIS_DIR=$(dirname "$0")
 
 export ANSIBLE_LIBRARY=${THIS_DIR}/../../../../plugins/
 export ANSIBLE_MODULE_UTILS=${ANSIBLE_LIBRARY}/module_utils/
@@ -30,11 +30,11 @@ FAILED_PLAYBOOKS=0
 TEST_PLAYBOOKS="test_mq_user.yml test_mq_user_info.yml test_mq_broker.yml test_mq_broker_config.yml"
 for playbook in $TEST_PLAYBOOKS; do
   echo "Run test playbook $playbook"
-  ansible-playbook -i inventory.ini tasks/$playbook $DEBUG
+  ansible-playbook -i inventory.ini "tasks/$playbook" "$DEBUG"
   RC=$?
   if [ $RC != 0 ]; then
     echo "test playbook $playbook failed"
-    FAILED_PLAYBOOKS=$(( $FAILED_PLAYBOOKS + 1 ))
+    FAILED_PLAYBOOKS=$(( FAILED_PLAYBOOKS + 1 ))
   fi
 done
 

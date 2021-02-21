@@ -12,7 +12,7 @@ module: mq_user
 version_added: 0.9.0
 short_description: Manage users in existing Amazon MQ broker
 description:
-    - Manage Amazon MQ users
+- Manage Amazon MQ users
 author:
 - FCO (frank-christian.otto@web.de)
 requirements: [ boto3 ]
@@ -92,27 +92,39 @@ user:
     type: complex
 '''
 
-# python3.6 or higher
-#import secrets
-# python2.7
-import random
-import hashlib
+import sys
+IS_PYTHON3 = True
+if sys.hexversion < 34013184:
+    # python2.6 hack
+    IS_PYTHON3 = False
+elif sys.version_info.major < 3:
+    IS_PYTHON3 = False
+
+if IS_PYTHON3:
+    import secrets
+else:
+    import random
+    import hashlib
 
 try:
     import botocore
-except ImportError:
-    pass  # caught by AnsibleAWSModule
+except ImportError as ex:
+    # handled by AnsibleAWSModule
+    pass
 
-#from ansible.module_utils._text import to_text
-#from ansible.module_utils.common.dict_transformations import camel_dict_to_snake_dict
-
-from ansible.module_utils.core import AnsibleAWSModule
+try:
+    # use different package reference to make it work in community.aws. original line
+    # from ansible.module_utils.core import AnsibleAWSModule
+    from ansible_collections.amazon.aws.plugins.module_utils.core import AnsibleAWSModule
+except ImportError as ex:
+    raise ex
 
 CREATE_DEFAULTS = {
     'console_access': False,
     'groups': [],
 
 }
+
 
 def _group_change_required(user_response, requested_groups):
     current_groups = []
@@ -128,6 +140,7 @@ def _group_change_required(user_response, requested_groups):
     #
     return False
 
+
 def _console_access_change_required(user_response, requested_boolean):
     current_boolean = CREATE_DEFAULTS['console_access']
     if 'ConsoleAccess' in user_response:
@@ -140,21 +153,24 @@ def _console_access_change_required(user_response, requested_boolean):
 
 
 def generate_password():
-    # python3.6 or higher
-    #return secrets.token_hex(20)
+    if IS_PYTHON3:
+        return secrets.token_hex(20)
     # python2.7:
     in_str = ''
-    for i in range(0,19):
+    for i in range(0, 19):
         in_str += str(random.randint(10000, 99999))
     #
     h = hashlib.md5()
     h.update(in_str)
     return h.hexdigest()
 
+
 # returns API response object
 def _create_user(conn, module):
-    kwargs = { 'BrokerId': module.params['broker_id'],
-               'Username': module.params['username'] }
+    kwargs = {
+        'BrokerId': module.params['broker_id'],
+        'Username': module.params['username']
+    }
     if 'groups' in module.params and module.params['groups'] is not None:
         kwargs['Groups'] = module.params['groups']
     else:
@@ -163,7 +179,7 @@ def _create_user(conn, module):
         kwargs['Password'] = module.params['password']
     else:
         kwargs['Password'] = generate_password()
-    if 'console_access' in module.params  and module.params['console_access'] is not None:
+    if 'console_access' in module.params and module.params['console_access'] is not None:
         kwargs['ConsoleAccess'] = module.params['console_access']
     else:
         kwargs['ConsoleAccess'] = CREATE_DEFAULTS['console_access']
@@ -173,6 +189,7 @@ def _create_user(conn, module):
         module.fail_json_aws(e, msg="Couldn't create user")
     return response
 
+
 # returns API response object
 def _update_user(conn, module, kwargs):
     try:
@@ -180,6 +197,7 @@ def _update_user(conn, module, kwargs):
     except (botocore.exceptions.ClientError, botocore.exceptions.BotoCoreError) as e:
         module.fail_json_aws(e, msg="Couldn't update user")
     return response
+
 
 def get_matching_user(conn, module, broker_id, username):
     try:
@@ -191,6 +209,7 @@ def get_matching_user(conn, module, broker_id, username):
             module.fail_json_aws(e, msg="Couldn't get user details")
     except botocore.exceptions.BotoCoreError as e:
         module.fail_json_aws(e, msg="Couldn't get user details")
+
 
 def ensure_user_present(conn, module):
     user = get_matching_user(conn, module, module.params['broker_id'], module.params['username'])
@@ -205,7 +224,7 @@ def ensure_user_present(conn, module):
         if 'groups' in module.params and module.params['groups'] is not None:
             if _group_change_required(user, module.params['groups']):
                 kwargs['Groups'] = module.params['groups']
-        if 'console_access' in module.params  and module.params['console_access'] is not None:
+        if 'console_access' in module.params and module.params['console_access'] is not None:
             if _console_access_change_required(user, module.params['console_access']):
                 kwargs['ConsoleAccess'] = module.params['console_access']
         if 'password' in module.params and module.params['password']:
@@ -234,7 +253,7 @@ def ensure_user_absent(conn, module):
         return {'changed': False}
     # better support for testing
     if 'Pending' in user and 'PendingChange' in user['Pending'] \
-        and user['Pending']['PendingChange'] == 'DELETE':
+    and user['Pending']['PendingChange'] == 'DELETE':
         return {'changed': False}
     try:
         if not module.check_mode:
