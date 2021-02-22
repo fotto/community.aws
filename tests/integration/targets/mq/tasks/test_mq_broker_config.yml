@@ -68,5 +68,3 @@
         that:
           - result.changed | bool
           - result.broker['BrokerState'] == 'REBOOT_IN_PROGRESS'
-
-
