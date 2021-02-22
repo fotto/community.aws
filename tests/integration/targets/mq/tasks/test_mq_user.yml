@@ -248,4 +248,3 @@
         fail_msg: test13 failed
         that:
           - not(result.changed | bool)
-
