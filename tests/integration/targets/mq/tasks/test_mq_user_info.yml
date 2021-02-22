@@ -120,4 +120,3 @@
           - result.users['info_user3']
           - result.users['info_user4']
           - not ('info_user5' in result.users)
-
