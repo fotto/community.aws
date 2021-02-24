@@ -13,16 +13,19 @@ version_added: 0.9.0
 short_description: retrieve MQ Broker details
 description:
   - Get details about a broker
-author: FCO (frank-christian.otto@web.de)
+author: FCO (@fotto)
 requirements:
   - boto3
   - botocore
 options:
   broker_id:
-    description:
-      - "The ID of the MQ broker to work on"
+    description: Get details for broker with specified ID
     type: str
-    required: true
+  broker_name:
+    description:
+    - "Get details for broker with specified Name"
+    - "is ignored if 'broker_id' is specified as well"
+    type: str
 
 extends_documentation_fragment:
 - amazon.aws.aws
@@ -32,17 +35,26 @@ extends_documentation_fragment:
 
 
 EXAMPLES = '''
-# Note: These examples do not set authentication details, see the AWS Guide for details.
-#       or check tests/integration/targets/mq/tasks/test_mq_broker.yml
-- name: get current broker settings - explicitly requesting info operation
+- name: get current broker settings by id
   amazon.aws.mq_broker_info:
     broker_id: "aws-mq-broker-id"
+    region: "{{ aws_region }}"
+  register: broker_info
+- name: get current broker settings by name setting all credential parameters explicitly
+  amazon.aws.mq_broker_info:
+    broker_name: "aws-mq-broker-name"
+    region: "{{ aws_region }}"
+    aws_access_key: "{{ aws_access_key_id }}"
+    aws_secret_key: "{{ aws_secret_access_key }}"
+    security_token: "{{ aws_session_token }}"
   register: broker_info
 '''
 
 RETURN = '''
 broker:
-    description: API response of describe_broker() after operation has been performed
+    description: API response of describe_broker()
+    type: dict
+    returned: success
 '''
 
 try:

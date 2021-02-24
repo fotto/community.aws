@@ -5,8 +5,8 @@ THIS_DIR=$(dirname "$0")
 export ANSIBLE_LIBRARY=${THIS_DIR}/../../../../plugins/
 export ANSIBLE_MODULE_UTILS=${ANSIBLE_LIBRARY}/module_utils/
 
-if [ -z "$MQ_BROKER_ID" ]; then
-  echo "MQ_BROKER_ID must be set"
+if [ -z "$MQ_BROKER_NAME" ]; then
+  echo "MQ_BROKER_NAME must be set"
   exit 1
 fi
 if [ -z "$AWS_REGION" ]; then

@@ -14,7 +14,7 @@ short_description: List users of an Amazon MQ broker
 description:
   - list users for the specified broker id
   - Pending creations and deletions can be skipped by options
-author: FCO (frank-christian.otto@web.de)
+author: FCO (@fotto)
 requirements:
   - boto3
   - botocore
@@ -23,6 +23,7 @@ options:
     description:
       - "The ID of the MQ broker to work on"
     type: str
+    required: true
   max_results:
     description:
       - "The maximum number of results to return"
@@ -46,7 +47,7 @@ options:
 
 extends_documentation_fragment:
 - amazon.aws.aws
-
+- amazon.aws.ec2
 '''
 
 
@@ -69,12 +70,13 @@ EXAMPLES = '''
 - name: check if some specific user exists
   debug:
     msg: "user sample_user1 exists"
-  when: 'sample_user1' in result.users
+  when: "'sample_user1' in result.users"
 '''
 
 RETURN = '''
 user:
-    type: complex
+    type: dict
+    returned: success
     description:
     - list of users as array or as dict keyed by username (if as_dict=true)
     - each elements/entry are 1:1 those from the 'Users' list in the API response of list_users()
@@ -135,7 +137,7 @@ def get_user_info(conn, module):
 def main():
     argument_spec = dict(
         broker_id=dict(required=True, type='str'),
-        max_results=dict(required=False, type=int, default=DEFAULTS['max_results']),
+        max_results=dict(required=False, type='int', default=DEFAULTS['max_results']),
         skip_pending_create=dict(required=False, type='bool', default=DEFAULTS['skip_pending_create']),
         skip_pending_delete=dict(required=False, type='bool', default=DEFAULTS['skip_pending_delete']),
         as_dict=dict(required=False, type='bool', default=False),
