@@ -97,7 +97,7 @@ IS_PYTHON3 = True
 if sys.hexversion < 34013184:
     # python2.6 hack
     IS_PYTHON3 = False
-elif sys.version_info.major < 3:
+elif sys.version_info.major < 3 or sys.version_info.minor 
     IS_PYTHON3 = False
 
 if IS_PYTHON3:
@@ -246,6 +246,7 @@ def ensure_user_present(conn, module):
         'changed': changed,
         'user': user
     }
+
 
 def ensure_user_absent(conn, module):
     user = get_matching_user(conn, module, module.params['broker_id'], module.params['username'])
