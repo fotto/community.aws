@@ -192,6 +192,11 @@ action_groups:
   - lambda_info
   - lambda_policy
   - lightsail
+  - mq_broker
+  - mq_broker_config
+  - mq_broker_info
+  - mq_user
+  - mq_user_info
   - rds
   - rds_instance
   - rds_instance_info
