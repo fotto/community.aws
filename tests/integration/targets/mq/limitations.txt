@@ -1,0 +1,15 @@
+general: requires a recent version of boto3 library
+
+The following features are not included, yet:
+
+mq_user_info.py
+- retrieve more than 100 users (if present)
+
+mq_broker.py
+- find broker by name if there are more than 100 present
+- support for LDAP connection
+- run update_broker() only if change is required
+
+mq_broker_config.py
+- have proper XML comparison for broker configurations
+- RabbitMQ support

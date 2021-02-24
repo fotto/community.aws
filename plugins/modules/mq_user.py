@@ -115,7 +115,8 @@ except ImportError as ex:
 try:
     # use different package reference to make it work in community.aws. original line
     # from ansible.module_utils.core import AnsibleAWSModule
-    from ansible_collections.amazon.aws.plugins.module_utils.core import AnsibleAWSModule
+    #from ansible_collections.amazon.aws.plugins.module_utils.core import AnsibleAWSModule
+    from ansible.module_utils.core import AnsibleAWSModule
 except ImportError as ex:
     raise ex
 

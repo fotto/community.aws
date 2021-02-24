@@ -3,7 +3,9 @@
   hosts: dummy
   gather_facts: false
   vars:
-    broker_id: "{{ lookup('env', 'MQ_BROKER_ID') }}"
+    broker_name: "{{ lookup('env', 'MQ_BROKER_NAME') }}"
+    broker_sg_ids: "{{ lookup('env', 'MQ_SG_IDS') | default('') }}"
+    broker_subnet_ids: "{{ lookup('env', 'MQ_SUBNET_IDS') | default('') }}"
     aws_access_key_id: "{{ lookup('env', 'AWS_ACCESS_KEY_ID') }}"
     aws_secret_access_key: "{{ lookup('env', 'AWS_SECRET_ACCESS_KEY') }}"
     aws_session_token: "{{ lookup('env', 'AWS_SESSION_TOKEN') }}"
@@ -13,10 +15,22 @@
   tasks:
     - name: show env
       debug:
-        msg: "Will run tests against broker '{{ broker_id }}' in AWS region '{{ aws_region }}'"
-    - name: test1 - show broker details
+        msg: "Will run tests against broker '{{ broker_name }}' in AWS region '{{ aws_region }}'"
+    - name: test - create broker with minimal parameters
       # amazon.aws.mq_broker:
       mq_broker:
+        broker_name: "{{ broker_name }}"
+        region: "{{ aws_region }}"
+        security_groups: "{{ broker_sg_ids.split(',') }}"
+        subnet_ids: "{{ broker_subnet_ids.split(',') }}"
+        aws_access_key: "{{ aws_access_key_id }}"
+        aws_secret_key: "{{ aws_secret_access_key }}"
+      register: result
+    - set_fact:
+        broker_id: "{{ result.broker['BrokerId'] }}"
+    - name: test1 - show broker details
+      # amazon.aws.mq_broker_info:
+      mq_broker_info:
         broker_id: "{{ broker_id }}"
         region: "{{ aws_region }}"
         aws_access_key: "{{ aws_access_key_id }}"
@@ -29,28 +43,34 @@
         that:
           - not (result.changed | bool)
           - result.broker['BrokerId'] == broker_id
-    - name: test2 - show broker details - explicitly requesting info
-      # amazon.aws.mq_broker:
-      mq_broker:
-        broker_id: "{{ broker_id }}"
-        operation: "info"
-        region: "{{ aws_region }}"
+          - result.broker['BrokerName'] == broker_name
+          - result.broker['BrokerState'] == 'CREATION_IN_PROGRESS'
+    - debug:
+        msg: "Wait until broker {{ broker_name }} ({{ broker_id }}) enters running state. This may take several minutes"
+    - name: wait for startup
+      # amazon.aws.mq_broker_info:
+      mq_broker_info:
+        broker_id:      "{{ broker_id }}"
+        region:         "{{ aws_region }}"
         aws_access_key: "{{ aws_access_key_id }}"
         aws_secret_key: "{{ aws_secret_access_key }}"
-        security_token: "{{ aws_session_token }}"
       register: result
-    - name: verify test2
-      #ansible.builtin.assert:
-      assert:
-        fail_msg: test2 failed
-        that:
-          - not (result.changed | bool)
-          - result.broker['BrokerId'] == broker_id
+      until: result.broker['BrokerState'] == 'RUNNING'
+      retries: 15
+      delay:   60
+    - name: update broker
+      # amazon.aws.mq_broker:
+      mq_broker:
+        broker_name: "{{ broker_name }}"
+        region:          "{{ aws_region }}"
+        auto_minor_version_upgrade: false
+        aws_access_key:  "{{ aws_access_key_id }}"
+        aws_secret_key:  "{{ aws_secret_access_key }}"
     - name: test3 - reboot broker
       # amazon.aws.mq_broker:
       mq_broker:
-        broker_id: "{{ broker_id }}"
-        operation: "reboot"
+        broker_name: "{{ broker_name }}"
+        state: "restarted"
         region: "{{ aws_region }}"
         aws_access_key: "{{ aws_access_key_id }}"
         aws_secret_key: "{{ aws_secret_access_key }}"
@@ -63,3 +83,27 @@
         that:
           - result.changed | bool
           - result.broker['BrokerState'] == 'REBOOT_IN_PROGRESS'
+    - debug:
+        msg: "Wait until reboot of broker {{ broker_name }} ({{ broker_id }}) is finished. This may take several minutes"
+    - name: wait for startup
+      # amazon.aws.mq_broker_info:
+      mq_broker_info:
+        broker_id:      "{{ broker_id }}"
+        region:         "{{ aws_region }}"
+        aws_access_key: "{{ aws_access_key_id }}"
+        aws_secret_key: "{{ aws_secret_access_key }}"
+      register: result
+      until: result.broker['BrokerState'] == 'RUNNING'
+      retries: 15
+      delay:   60
+    - name: delete broker
+      # amazon.aws.mq_broker:
+      mq_broker:
+        broker_name: "{{ broker_name }}"
+        state: "absent"
+        region: "{{ aws_region }}"
+        aws_access_key: "{{ aws_access_key_id }}"
+        aws_secret_key: "{{ aws_secret_access_key }}"
+        security_token: "{{ aws_session_token }}"
+      register: result
+
