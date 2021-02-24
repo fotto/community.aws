@@ -12,36 +12,44 @@ module: mq_user
 version_added: 0.9.0
 short_description: Manage users in existing Amazon MQ broker
 description:
-- Manage Amazon MQ users
+- Manage Amazon MQ users.
+- "pending changes are taking into account, i.e. "
+- "if you update a user without rebooting the broker then running "
+- "that operation a 2nd type (without reboot) will yield 'changed=false'."
+- "see 'options' seconds to learn about password handling" 
 author:
-- FCO (frank-christian.otto@web.de)
+- FCO (@fotto)
 requirements: [ boto3 ]
 options:
   broker_id:
     description:
       - "The ID of the MQ broker to work on"
     type: str
+    required: true
   username:
     description:
       - "The name of the user to create/update/delete"
     type: str
+    required: true
   state:
     description:
       - "Create/Update vs Delete of user."
     default: present
     choices: [ 'present', 'absent' ]
+    type: str
   console_access:
     description:
       - "True: user can use MQ Console."
       - "Will not be changed on update unless explicitly defined"
+      - "default on create: false"
     type: bool
-    default: false
   groups:
     description:
       - "Set group memberships for user"
       - "Will not be changed on update unless explicitly defined"
+      - "default on create: empty list"
     type: list
-    default: empty list
+    elements: str
   password:
     description:
       - "Set password for user"
@@ -53,18 +61,21 @@ options:
       - "Only used of 'password' parameter set for existing user"
     default: false
     type: bool
+  region:
+    description:
+    - set AWS region for API operations
+    type: str
 extends_documentation_fragment:
 - amazon.aws.aws
-
+- amazon.aws.ec2
 '''
 
 EXAMPLES = '''
-# Note: These examples do not set authentication details, see the AWS Guide for details.
-# check tests/integration/targets/mq/tasks/test_mq_user.yml for more examples
 - name: create/update user - set provided password if user doesn't exist, yet
   amazon.aws.mq_user:
     state: present
     broker_id: "aws-mq-broker-id"
+    region: "{{ aws_region }}"
     username: "sample_user1"
     console_access: false
     groups: [ "g1", "g2" ]
@@ -73,34 +84,39 @@ EXAMPLES = '''
   amazon.aws.mq_user:
     broker_id: "aws-mq-broker-id"
     username: "sample_user1"
+    region: "{{ aws_region }}"
     console_access: true
     groups: [ "g1", "g2", "g3" ]
-- name: remove user
+- name: remove user - setting all credentials explicitly
   amazon.aws.mq_user:
     state: absent
     broker_id: "aws-mq-broker-id"
     username: "other_user"
-  - name: reboot broker to apply pending user changes
-  amazon.aws.mq_broker:
-    broker_id: "aws-mq-broker-id"
-    operation: "reboot"
+    region: "{{ aws_region }}"
+    aws_access_key: "{{ aws_access_key_id }}"
+    aws_secret_key: "{{ aws_secret_access_key }}"
+    security_token: "{{ aws_session_token }}"
 '''
 
 RETURN = '''
 user:
-    description: API response from create or update operation.
-    type: complex
+    description: 
+    - just echos the username
+    - "only present when state=present"
+    type: str
+    returned: success
 '''
 
 import sys
-IS_PYTHON3 = True
+IS_PYTHON36 = True
 if sys.hexversion < 34013184:
     # python2.6 hack
-    IS_PYTHON3 = False
-elif sys.version_info.major < 3 or sys.version_info.minor 
-    IS_PYTHON3 = False
+    IS_PYTHON36 = False
+else:
+    if sys.version_info.major < 3 or sys.version_info.minor < 6:
+        IS_PYTHON36 = False
 
-if IS_PYTHON3:
+if IS_PYTHON36:
     import secrets
 else:
     import random
@@ -153,7 +169,7 @@ def _console_access_change_required(user_response, requested_boolean):
 
 
 def generate_password():
-    if IS_PYTHON3:
+    if IS_PYTHON36:
         return secrets.token_hex(20)
     # python2.7:
     in_str = ''
@@ -254,7 +270,7 @@ def ensure_user_absent(conn, module):
         return {'changed': False}
     # better support for testing
     if 'Pending' in user and 'PendingChange' in user['Pending'] \
-    and user['Pending']['PendingChange'] == 'DELETE':
+            and user['Pending']['PendingChange'] == 'DELETE':
         return {'changed': False}
     try:
         if not module.check_mode:
@@ -269,7 +285,7 @@ def main():
         broker_id=dict(required=True, type='str'),
         username=dict(required=True, type='str'),
         console_access=dict(required=False, type='bool'),
-        groups=dict(required=False, type='list'),
+        groups=dict(required=False, type='list', elements='str'),
         password=dict(required=False, type='str', no_log=True),
         allow_pw_update=dict(default=False, required=False, type='bool'),
         state=dict(default='present', choices=['present', 'absent'])

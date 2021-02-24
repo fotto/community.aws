@@ -10,11 +10,13 @@ DOCUMENTATION = '''
 ---
 module: mq_broker_config
 version_added: 0.9.0
-short_description: Update broker configuration
+short_description: Update Amazon MQ broker configuration
 description:
-  - Update configuration for an MQ broker
-  - Optionally allows broker reboot to make changes effective immediately
-author: FCO (frank-christian.otto@web.de)
+  - "Update configuration for an MQ broker."
+  - "If new configuration differs from the current one: a new configuration "
+  - "is created and the new version is assigned to the broker."
+  - "Optionally allows broker reboot to make changes effective immediately"
+author: FCO (@fotto)
 requirements:
   - boto3
   - botocore
@@ -23,10 +25,12 @@ options:
     description:
       - "The ID of the MQ broker to work on"
     type: str
+    required: true
   config_xml:
     description:
       - "The maximum number of results to return"
     type: str
+    required: true
   config_description:
     description:
       - "Description to set on new configuration revision"
@@ -39,39 +43,51 @@ options:
 
 extends_documentation_fragment:
 - amazon.aws.aws
+- amazon.aws.ec2
 
 '''
 
 EXAMPLES = '''
-# Note: These examples do not set authentication details, see the AWS Guide for details.
-#       or check tests/integration/targets/mq/tasks/test_mq_broker_config.yml
-- name: send new XML config to broker
+- name: send new XML config to broker relying on credentials from environment
   amazon.aws.mq_broker_config:
     broker_id: "aws-mq-broker-id"
     config_xml: "{{ lookup('file', 'activemq.xml' )}}"
-- name: reboot broker to make new config active
-  amazon.aws.mq_broker:
+    region: "{{ aws_region }}"
+- name: send new XML config to broker and reboot if necessary
+  amazon.aws.mq_broker_config:
     broker_id: "aws-mq-broker-id"
-    operation: "reboot"
+    config_xml: "{{ lookup('file', 'activemq2.xml' )}}"
+    reboot: true
+- name: send new broker config and set all credentials explicitly
+  amazon.aws.mq_broker_config:
+    broker_id: "{{ broker_id }}"
+    config_xml: "{{ lookup('file', 'activemq3.xml')}}"
+    config_description: "custom description for configuration objectg"
+    region: "{{ aws_region }}"
+    aws_access_key: "{{ aws_access_key_id }}"
+    aws_secret_key: "{{ aws_secret_access_key }}"
+    security_token: "{{ aws_session_token }}"
+    register: result
 '''
 
 RETURN = '''
 broker:
-    description: API response of describe_broker() after changes have been applied
-    type: complex
+  description: API response of describe_broker() after changes have been applied
+  type: dict
+  returned: success
 configuration:
-    description: details about new configuration object
-    returned: I(changed=true)
-    type: complex
-    contains:
-        id:
-            description: configuration ID of broker configuration
-            type: str
-            example: c-386541b8-3139-42c2-9c2c-a4c267c1714f
-        revision
-            description: revision of the configuration that will be active after next reboot
-            type: int
-            example: 4
+  description: details about new configuration object
+  returned: I(changed=true)
+  type: complex
+  contains:
+    id:
+      description: configuration ID of broker configuration
+      type: str
+      example: c-386541b8-3139-42c2-9c2c-a4c267c1714f
+    revision:
+      description: revision of the configuration that will be active after next reboot
+      type: int
+      example: 4
 '''
 
 import base64

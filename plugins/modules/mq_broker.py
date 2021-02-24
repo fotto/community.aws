@@ -10,25 +10,125 @@ DOCUMENTATION = '''
 ---
 module: mq_broker
 version_added: 0.9.0
-short_description: MQ broker configurations except user/config changes
+short_description: MQ broker management
 description:
-  - Get details about a broker
+  - create/update/delete a broker.
   - reboot a broker
-author: FCO (frank-christian.otto@web.de)
+author: FCO (@fotto)
 requirements:
   - boto3
   - botocore
 options:
-  broker_id:
+  broker_name:
     description:
-      - "The ID of the MQ broker to work on"
+    - "The Name of the MQ broker to work on"
     type: str
     required: true
   state:
     description:
-    - "Allows create/update/delete and reboot ('restarted')"
+    - "'present': create/update broker"
+    - "'absent': delete broker"
+    - "'restarted': reboot broker"
     choices: [ 'present', 'absent', 'restarted' ]
     default: present
+    type: str
+  deployment_mode:
+    description:
+    - set broker deployment type
+    - can be used only during creation
+    - "default: 'SINGLE_INSTANCE'"
+    choices: [ 'SINGLE_INSTANCE', 'ACTIVE_STANDBY_MULTI_AZ', 'CLUSTER_MULTI_AZ' ]
+    type: str
+  use_aws_owned_key:
+    description:
+    - must be set to false if 'kms_key_id' is provided as well
+    - can be used only during creation
+    - "default: true"
+    type: bool
+  kms_key_id:
+    description:
+    - use referenced key to encrypt broker data at rest
+    - can be used only during creation
+    type: str
+  engine_type:
+    description:
+    - set broker engine type
+    - can be used only during creation
+    - "default: 'ACTIVEMQ'"
+    choices: [ 'ACTIVEMQ', 'RABBITMQ' ]
+    type: str
+  maintenance_window_start_time:
+    description:
+    - set maintenance window for automatic minor upgrades
+    - can be used only during creation
+    - not providing any value means "no maintenance window"
+    type: dict
+  publicly_accessible:
+    description:
+    - allow/disallow public access
+    - can be used only during creation
+    - "default: false"
+    type: bool
+  storage_type:
+    description:
+    - set underlying storage type
+    - can be used only during creation
+    - "default: 'EFS'"
+    choices: [ 'EBS', 'EFS' ]
+    type: str
+  subnet_ids:
+    description:
+    - defines where deploy broker instances to
+    - minimum required number depends on deployment type
+    - can be used only during creation
+    type: list
+    elements: str
+  users:
+    description:
+    - "module 'mq_user' is the preferred way to manage (local) users"
+    - "however a broker cannot be created without any user"
+    - "if nothing is specified a default 'admin' user will be created along with brokers"
+    - "this parameter allows to use a custom set of initial user(s)"
+    - "can be used only during creation: use mq_user module for updates"
+    type: list
+    elements: dict
+  tags:
+    description:
+    - tag newly created brokers
+    - can be used only during creation
+    type: dict
+  authentication_strategy:
+    description: choose between locally and remotely managed users
+    choices: [ 'SIMPLE', 'LDAP' ]
+    type: str
+  auto_minor_version_upgrade:
+    description: allow/disallow automatic minor version upgrades
+    type: bool
+    default: true
+  engine_version:
+    description: set engine version of broker
+    type: str
+  host_instance_type:
+    description: instance type of broker instances
+    type: str
+  enable_audit_log:
+    description: enable/disable to push audit logs to AWS CloudWatch
+    type: bool
+    default: false
+  enable_general_log:
+    description: enable/disable to push general logs to AWS CloudWatch
+    type: bool
+    default: false
+  security_groups:
+    description:
+    - associate security groups with broker
+    - at least one must be provided during creation
+    type: list
+    elements: str
+  region:
+    description:
+    - set AWS region for API operations
+    type: str
 
 extends_documentation_fragment:
 - amazon.aws.aws
@@ -38,13 +138,82 @@ extends_documentation_fragment:
 
 
 EXAMPLES = '''
-# Note: These examples do not set authentication details, see the AWS Guide for details.
-#       or check tests/integration/targets/mq/tasks/test_mq_broker.yml
+- name: create broker (if missing) with minimal required parameters
+  amazon.aws.mq_broker:
+    broker_name: "{{ broker_name }}"
+    region: "{{ aws_region }}"
+    security_groups:
+    - sg_xxxxxxx
+    subnet_ids:
+    - subnet_xxx
+    - subnet_yyy
+    register: result
+- set_fact:
+    broker_id: "{{ result.broker['BrokerId'] }}"
+- name: use mq_broker_info to wait until broker is ready
+  amazon.aws.mq_broker_info:
+    broker_id: "{{ broker_id }}"
+    region: "{{ aws_region }}"
+  register: result
+  until: "result.broker['BrokerState'] == 'RUNNING'"
+  retries: 15
+  delay:   60
+- name: create or update broker with almost all parameter set including credentials
+  amazon.aws.mq_broker:
+    broker_name: "my_broker_2"
+    state: present
+    deployment_mode: 'ACTIVE_STANDBY_MULTI_AZ'
+    use_aws_owned_key: false
+    kms_key_id: 'my-precreted-key-id'
+    engine_type: 'ACTIVEMQ'
+    maintenance_window_start_time:
+      DayOfWeek: 'MONDAY'
+      TimeOfDay: '03:15'
+      TimeZone: 'Europe/Berlin'
+    publicly_accessible: true
+    storage_type: 'EFS'
+    security_groups:
+    - sg_xxxxxxx
+    subnet_ids:
+    - subnet_xxx
+    - subnet_yyy
+    region: "{{ aws_region }}"
+    aws_access_key: "{{ aws_access_key_id }}"
+    aws_secret_key: "{{ aws_secret_access_key }}"
+    security_token: "{{ aws_session_token }}"
+    users:
+    - Username: 'initial-user'
+      Password': 'plain-text-password'
+      ConsoleAccess: true
+    tags:
+    - env: Test
+      creator: ansible
+    authentication_strategy: 'SIMPLE'
+    auto_minor_version_upgrade: true
+    engine_version: "5.15.13"
+    host_instance_type: 'mq.t3.micro'
+    enable_audit_log: true
+    enable_general_log: true
+- name: reboot a broker
+  amazon.aws.mq_broker:
+    broker_name: "my_broker_2"
+    state: restarted
+    region: "{{ aws_region }}"
+- name: delete a broker
+  amazon.aws.mq_broker:
+    broker_name: "my_broker_2"
+    state: absent
+    region: "{{ aws_region }}"
 '''
 
 RETURN = '''
 broker:
-    description: API response of describe_broker() after operation has been performed
+    description:
+    - "'state=present': API response of create_broker() or update_broker() call"
+    - "'state=absent': result of describe_broker() call before delete_broker() is triggerd"
+    - "'state=restarted': result of describe_broker() after reboot has been triggered"
+    type: dict
+    returned: success
 '''
 
 try:
@@ -127,12 +296,16 @@ def _set_kwarg(kwargs, key, value):
     data[key_list[0]] = value
 
 
-def _fill_kwargs(module, apply_defaults=True):
+def _fill_kwargs(module, apply_defaults=True, ignore_create_params=False):
     kwargs = {}
     if apply_defaults:
         for p_name in DEFAULTS:
             _set_kwarg(kwargs, p_name, DEFAULTS[p_name])
     for p_name in module.params:
+        if ignore_create_params and p_name in CREATE_ONLY_PARAMS:
+            # silently ignore CREATE_ONLY_PARAMS on updated to
+            # make playbooks idempotent
+            continue
         if p_name in PARAMS_MAP and module.params[p_name] is not None:
             _set_kwarg(kwargs, p_name, module.params[p_name])
         else:
@@ -197,7 +370,7 @@ def create_broker(conn, module):
     if 'EncryptionOptions' in kwargs and 'UseAwsOwnedKey' in kwargs['EncryptionOptions']:
         kwargs['EncryptionOptions']['UseAwsOwnedKey'] = False
     #
-    if not 'SecurityGroups' in kwargs or len(kwargs['SecurityGroups']) == 0:
+    if 'SecurityGroups' not in kwargs or len(kwargs['SecurityGroups']) == 0:
         module.fail_json_aws(RuntimeError, msg="At least one security group must be specified on broker creation")
     #
     changed = True
@@ -213,11 +386,7 @@ def create_broker(conn, module):
 
 
 def update_broker(conn, module, broker_id):
-    for p_name in module.params:
-        if module.params[p_name] is not None and p_name in CREATE_ONLY_PARAMS:
-            module.fail_json_aws(RuntimeError, msg="Parameter '{0}' cannot be changed.".format(p_name))
-    #
-    kwargs = _fill_kwargs(module, apply_defaults=False)
+    kwargs = _fill_kwargs(module, apply_defaults=False, ignore_create_params=True)
     # replace name with id
     del kwargs['BrokerName']
     kwargs['BrokerId'] = broker_id
@@ -249,13 +418,13 @@ def main():
         deployment_mode=dict(choices=['SINGLE_INSTANCE', 'ACTIVE_STANDBY_MULTI_AZ', 'CLUSTER_MULTI_AZ']),
         use_aws_owned_key=dict(type='bool'),
         kms_key_id=dict(type='str'),
-        engine_type=dict(choices=['ACTIVEMQ', 'RABBITMQ']),
-        maintenance_window_start_time=dict(type='map'),
+        engine_type=dict(choices=['ACTIVEMQ', 'RABBITMQ'], type='str'),
+        maintenance_window_start_time=dict(type='dict'),
         publicly_accessible=dict(type='bool'),
         storage_type=dict(choices=['EBS', 'EFS']),
         subnet_ids=dict(type='list', elements='str'),
-        users=dict(type='list'),
-        tags=dict(type='map'),
+        users=dict(type='list', elements='dict'),
+        tags=dict(type='dict'),
         # parameters allowed on update as well
         authentication_strategy=dict(choices=['SIMPLE', 'LDAP']),
         auto_minor_version_upgrade=dict(default=True, type='bool'),
