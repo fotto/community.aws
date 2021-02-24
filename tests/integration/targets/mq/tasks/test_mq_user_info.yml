@@ -3,7 +3,7 @@
   hosts: dummy
   gather_facts: false
   vars:
-    broker_id: "{{ lookup('env', 'MQ_BROKER_ID') }}"
+    broker_name: "{{ lookup('env', 'MQ_BROKER_NAME') }}"
     aws_access_key_id: "{{ lookup('env', 'AWS_ACCESS_KEY_ID') }}"
     aws_secret_access_key: "{{ lookup('env', 'AWS_SECRET_ACCESS_KEY') }}"
     aws_session_token: "{{ lookup('env', 'AWS_SESSION_TOKEN') }}"
@@ -21,7 +21,16 @@
   tasks:
     - name: show env
       debug:
-        msg: "Will run tests against broker '{{ broker_id }}' in AWS region '{{ aws_region }}'"
+        msg: "Will run tests against broker '{{ broker_name }}' in AWS region '{{ aws_region }}'"
+    - name: determine broker_id
+      mq_broker_info:
+        broker_name:      "{{ broker_name }}"
+        region:         "{{ aws_region }}"
+        aws_access_key: "{{ aws_access_key_id }}"
+        aws_secret_key: "{{ aws_secret_access_key }}"
+      register:       result
+    - set_fact:
+        broker_id: "{{ result.broker['BrokerId'] }}"
     - name: prepare tests - create users
       # amazon.aws.mq_user:
       mq_user:
