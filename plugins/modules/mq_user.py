@@ -16,7 +16,7 @@ description:
 - "pending changes are taking into account, i.e. "
 - "if you update a user without rebooting the broker then running "
 - "that operation a 2nd type (without reboot) will yield 'changed=false'."
-- "see 'options' seconds to learn about password handling" 
+- "see 'options' seconds to learn about password handling"
 author:
 - FCO (@fotto)
 requirements: [ boto3 ]
@@ -100,7 +100,7 @@ EXAMPLES = '''
 
 RETURN = '''
 user:
-    description: 
+    description:
     - just echos the username
     - "only present when state=present"
     type: str
