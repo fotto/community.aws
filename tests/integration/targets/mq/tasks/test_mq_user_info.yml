@@ -74,7 +74,6 @@
       mq_user_info:
         broker_id: "{{ broker_id }}"
         region: "{{ aws_region }}"
-        as_dict: true
         aws_access_key: "{{ aws_access_key_id }}"
         aws_secret_key: "{{ aws_secret_access_key }}"
         security_token: "{{ aws_session_token }}"
@@ -92,7 +91,6 @@
       mq_user_info:
         broker_id: "{{ broker_id }}"
         region: "{{ aws_region }}"
-        as_dict: true
         skip_pending_create: true
         aws_access_key: "{{ aws_access_key_id }}"
         aws_secret_key: "{{ aws_secret_access_key }}"
@@ -113,7 +111,6 @@
       mq_user_info:
         broker_id: "{{ broker_id }}"
         region: "{{ aws_region }}"
-        as_dict: true
         skip_pending_delete: true
         aws_access_key: "{{ aws_access_key_id }}"
         aws_secret_key: "{{ aws_secret_access_key }}"
