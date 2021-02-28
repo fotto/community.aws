@@ -52,34 +52,39 @@ extends_documentation_fragment:
 
 
 EXAMPLES = '''
-# Note: These examples do not set authentication details, see the AWS Guide for details.
-#       or check tests/integration/targets/mq/tasks/test_mq_user_info.yml
-- name: get all users as list
+- name: get all users as list - relying on environment for API credentials
   amazon.aws.mq_user_info:
     broker_id: "aws-mq-broker-id"
-    max_results: 1000
+    max_results: 50
+    region: "{{ aws_region }}"
   register: result
-- name: show number of users retrieved
-  debug:
-    msg: "{{ result.users | length }}"
-- name: get users as dict - relying on default limit
+- name: get users as dict - explicitly specifying all credentials
   amazon.aws.mq_user_info:
     broker_id: "aws-mq-broker-id"
-    as_dict: true
+    region: "{{ aws_region }}"
+    aws_access_key: "{{ aws_access_key_id }}"
+    aws_secret_key: "{{ aws_secret_access_key }}"
+    security_token: "{{ aws_session_token }}"
   register: result
-- name: check if some specific user exists
-  debug:
-    msg: "user sample_user1 exists"
-  when: "'sample_user1' in result.users"
+- name: get list of users to decide which may need to be deleted
+  amazon.aws.mq_user_info:
+    broker_id: "aws-mq-broker-id"
+    skip_pending_delete: true
+    region: "{{ aws_region }}"
+- name: get list of users to decide which may need to be created
+  amazon.aws.mq_user_info:
+    broker_id: "aws-mq-broker-id"
+    skip_pending_create: true
+    region: "{{ aws_region }}"
 '''
 
 RETURN = '''
-user:
+users:
     type: dict
     returned: success
     description:
-    - list of users as array or as dict keyed by username (if as_dict=true)
-    - each elements/entry are 1:1 those from the 'Users' list in the API response of list_users()
+    - dict key is username
+    - each entry is the record for a user as returned by API
 '''
 
 try:
@@ -99,7 +104,8 @@ except ImportError as ex:
 DEFAULTS = {
     'max_results': 100,
     'skip_pending_create': False,
-    'skip_pending_delete': False
+    'skip_pending_delete': False,
+    'as_dict': True
 }
 
 
@@ -124,7 +130,7 @@ def get_user_info(conn, module):
             #
             records.append(record)
     #
-    if module.params['as_dict']:
+    if DEFAULTS['as_dict']:
         user_records = {}
         for record in records:
             user_records[record['Username']] = record
@@ -148,11 +154,11 @@ def main():
     connection = module.client('mq')
 
     try:
-        user_list = get_user_info(connection, module)
+        user_records = get_user_info(connection, module)
     except botocore.exceptions.ClientError as e:
         module.fail_json_aws(e)
 
-    module.exit_json(users=user_list)
+    module.exit_json(users=user_records)
 
 
 if __name__ == '__main__':
