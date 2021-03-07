@@ -314,6 +314,57 @@ def _fill_kwargs(module, apply_defaults=True, ignore_create_params=False):
     return kwargs
 
 
+def __list_needs_change(current, desired):
+    if len(current) != len(desired):
+        return True
+    # equal length:
+    c_sorted = sorted(current)
+    d_sorted = sorted(desired)
+    for index, value in enumerate(current):
+        if value != desired[index]:
+            return True
+    #
+    return False
+
+
+def __dict_needs_change(current, desired):
+    # values contained in 'current' but not specified in 'desired' are ignored
+    # value contained in 'desired' but not in 'current' (unsupported attributes) are ignored
+    for key in desired:
+        if key in current:
+            if desired[key] != current[key]:
+                return True
+    #
+    return False
+
+
+def _needs_change(current, desired):
+    needs_change = False
+    for key in desired:
+        current_value = current[key]
+        desired_value = desired[key]
+        if type(current_value) in [int, str, bool]:
+            if current_value != desired_value:
+                needs_change = True
+                break
+        elif isinstance(current_value, list):
+            # assumption: all 'list' type settings we allow changes for have scalar values
+            if __list_needs_change(current_value, desired_value):
+                needs_change = True
+                break
+        elif isinstance(current_value, dict):
+            # assumption: all 'dict' type settings we allow changes for have scalar values
+            if __dict_needs_change(current_value, desired_value):
+                needs_change = True
+                break
+        else:
+            # unexpected type
+            needs_change = True
+            break
+    #
+    return needs_change
+
+
 def get_broker_id(conn, module):
     try:
         broker_name = module.params['broker_name']
@@ -388,18 +439,54 @@ def create_broker(conn, module):
 def update_broker(conn, module, broker_id):
     kwargs = _fill_kwargs(module, apply_defaults=False, ignore_create_params=True)
     # replace name with id
+    broker_name = kwargs['BrokerName']
     del kwargs['BrokerName']
     kwargs['BrokerId'] = broker_id
-    # TODO: get current state and check whether change is necessary at all
-    changed = True
-    if not module.check_mode:
-        result = conn.update_broker(**kwargs)
-    else:
-        result = {
-            'BrokerId': broker_id
-        }
+    # get current state for comparison:
+    api_result = get_broker_info(conn, module, broker_id)
+    if api_result['BrokerState'] != 'RUNNING':
+        module.fail_json_aws(RuntimeError,
+                             msg="Cannot trigger update while broker ({0}) is in state {1}".format(
+                                 broker_id, api_result['BrokerState']
+                             ))
+    result = {
+        'BrokerId': broker_id,
+        'BrokerName': broker_name
+    }
+    changed = False
+    if _needs_change(api_result, kwargs):
+        changed = True
+        if not module.check_mode:
+            api_result = conn.update_broker(**kwargs)
+        #
     #
     return {'broker': result, 'changed': changed}
+
+
+
+def ensure_absent(conn, module):
+    result = {
+        'BrokerName': module.params['broker_name'],
+        'BrokerId': None
+    }
+    if module.check_mode:
+        return {'broker': result, 'changed': True}
+    broker_id = get_broker_id(conn, module)
+    result['BrokerId'] = broker_id
+    if broker_id:
+        try:
+            # check for pending delete (small race condition possible here
+            api_result = get_broker_info(conn, module, broker_id)
+            if api_result['BrokerState'] == 'DELETION_IN_PROGRESS':
+                return {'broker': result, 'changed': False}
+            delete_broker(conn, module, broker_id)
+        except botocore.exceptions.ClientError as e:
+            module.fail_json_aws(e)
+        #
+        return {'broker': result, 'changed': True}
+    else:
+        # silently ignore delete of unknown broker (to make it idempotent)
+        return {'broker': result, 'changed': False}
 
 
 def ensure_present(conn, module):
@@ -447,19 +534,12 @@ def main():
         #
         module.exit_json(**compound_result)
     elif module.params['state'] == 'absent':
-        broker_id = get_broker_id(connection, module)
-        if not broker_id:
-            module.fail_json_aws(RuntimeError,
-                                 msg="Cannot find broker with name {0}.".format(module.params['broker_name']))
-        result = get_broker_info(connection, module, broker_id)
         try:
-            changed = True
-            if not module.check_mode:
-                delete_broker(connection, module, broker_id)
+            compound_result = ensure_absent(connection, module)
         except botocore.exceptions.ClientError as e:
             module.fail_json_aws(e)
         #
-        module.exit_json(broker=result, changed=changed)
+        module.exit_json(**compound_result)
     elif module.params['state'] == 'restarted':
         broker_id = get_broker_id(connection, module)
         if not broker_id:
