@@ -24,11 +24,6 @@ options:
       - "The ID of the MQ broker to work on"
     type: str
     required: true
-  max_results:
-    description:
-      - "The maximum number of results to return"
-    type: int
-    default: 100
   skip_pending_create:
     description:
       - "Will skip pending creates from the result set"
@@ -55,7 +50,6 @@ EXAMPLES = '''
 - name: get all users as list - relying on environment for API credentials
   amazon.aws.mq_user_info:
     broker_id: "aws-mq-broker-id"
-    max_results: 50
     region: "{{ aws_region }}"
   register: result
 - name: get users as dict - explicitly specifying all credentials
@@ -95,33 +89,54 @@ except ImportError as ex:
 
 try:
     # use different package reference to make it work in community.aws. original line
-    # from ansible.module_utils.core import AnsibleAWSModule
-    from ansible_collections.amazon.aws.plugins.module_utils.core import AnsibleAWSModule
+    from ansible.module_utils.core import AnsibleAWSModule
 except ImportError as ex:
     raise ex
 
 
 DEFAULTS = {
-    'max_results': 100,
     'skip_pending_create': False,
     'skip_pending_delete': False,
-    'as_dict': True
+    'as_dict': True,
+    'page_size': 100
 }
+
+
+def get_user_records(conn, module):
+    page_size = DEFAULTS['page_size']
+    broker_id = module.params['broker_id']
+    next_token = ''
+    first_query = True
+    records = []
+
+    while next_token or first_query:
+        response = conn.list_users(
+            BrokerId=broker_id,
+            MaxResults=page_size,
+            NextToken=next_token
+        )
+        first_query = False
+        records += response['Users']
+        if 'NextToken' in response:
+            next_token = response['NextToken']
+        else:
+            next_token = None
+    #
+    return records
 
 
 def get_user_info(conn, module):
     try:
-        response = conn.list_users(BrokerId=module.params['broker_id'],
-                                   MaxResults=module.params['max_results'])
+        response_records = get_user_records(conn, module)
     except (botocore.exceptions.ClientError, botocore.exceptions.BotoCoreError) as e:
         module.fail_json_aws(e, msg='Failed to describe users')
     #
     if not module.params['skip_pending_create'] and not module.params['skip_pending_delete']:
         # we can simply return the sub-object from the response
-        records = response['Users']
+        records = response_records
     else:
         records = []
-        for record in response['Users']:
+        for record in response_records:
             if 'PendingChange' in record:
                 if record['PendingChange'] == 'CREATE' and module.params['skip_pending_create']:
                     continue
@@ -143,7 +158,6 @@ def get_user_info(conn, module):
 def main():
     argument_spec = dict(
         broker_id=dict(required=True, type='str'),
-        max_results=dict(required=False, type='int', default=DEFAULTS['max_results']),
         skip_pending_create=dict(required=False, type='bool', default=DEFAULTS['skip_pending_create']),
         skip_pending_delete=dict(required=False, type='bool', default=DEFAULTS['skip_pending_delete']),
         as_dict=dict(required=False, type='bool', default=False),

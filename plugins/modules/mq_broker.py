@@ -224,10 +224,12 @@ except ImportError as ex:
 
 try:
     # when moving to amazon.aws change import to
-    # from ansible.module_utils.core import AnsibleAWSModule
-    from ansible_collections.amazon.aws.plugins.module_utils.core import AnsibleAWSModule
+    from ansible.module_utils.core import AnsibleAWSModule
 except ImportError as ex:
     raise ex
+
+
+PAGE_SIZE = 20
 
 
 PARAMS_MAP = {
@@ -369,14 +371,17 @@ def get_broker_id(conn, module):
     try:
         broker_name = module.params['broker_name']
         broker_id = None
-        response = conn.list_brokers(MaxResults=100)
-        for broker in response['BrokerSummaries']:
-            if broker['BrokerName'] == broker_name:
-                broker_id = broker['BrokerId']
-                break
-        return broker_id
+        # use paginator to make search for id work also
+        # when there are more than 100 brokers
+        paginator = conn.get_paginator('list_brokers')
+        page_iterator = paginator.paginate(PaginationConfig={'PageSize': PAGE_SIZE})
+        for page in page_iterator:
+            for broker in page['BrokerSummaries']:
+                if broker['BrokerName'] == broker_name:
+                    broker_id = broker['BrokerId']
+                    return broker_id
     except (botocore.exceptions.ClientError, botocore.exceptions.BotoCoreError) as e:
-        module.fail_json_aws(e, msg="Couldn't list broker brokers.")
+        module.fail_json_aws(e, msg="Couldn't list/paginate brokers.")
 
 
 def get_broker_info(conn, module, broker_id):
