@@ -45,6 +45,7 @@
           - result.user['Username'] == usernames[0]
           - not (result.user['Pending']['ConsoleAccess'] | bool)
           - result.user['Pending']['Groups'] | length == 0
+      when: not ansible_check_mode
     - name: test2 - create user with console access and group list
       # amazon.aws.mq_user:
       mq_user:
@@ -67,6 +68,7 @@
           - result.user['Username'] == usernames[1]
           - result.user['Pending']['ConsoleAccess'] | bool
           - result.user['Pending']['Groups'] | length == 2
+      when: not ansible_check_mode
     - name: test3 - create user with defined password
       # amazon.aws.mq_user:
       mq_user:
@@ -87,6 +89,7 @@
           - result.user['Username'] == usernames[2]
           - not (result.user['Pending']['ConsoleAccess'] | bool)
           - result.user['Pending']['Groups'] | length == 0
+      when: not ansible_check_mode
     - name: test4 - update user password - ignore mode
       # amazon.aws.mq_user:
       mq_user:
@@ -104,6 +107,7 @@
         fail_msg: test4 failed
         that:
           - not (result.changed | bool)
+      when: not ansible_check_mode
     - name: test5 - update user password - force mode
       # amazon.aws.mq_user:
       mq_user:
@@ -122,6 +126,7 @@
         fail_msg: test5 failed
         that:
           - result.changed | bool
+      when: not ansible_check_mode
     - name: test6 - update console access - same value
       # amazon.aws.mq_user:
       mq_user:
@@ -139,6 +144,7 @@
         fail_msg: test6 failed
         that:
           - not (result.changed | bool)
+      when: not ansible_check_mode
     - name: test7 - update console access - new value
       # amazon.aws.mq_user:
       mq_user:
@@ -158,6 +164,7 @@
           - result.changed | bool
           - not( result.user['Pending']['ConsoleAccess'] | bool )
           - result.user['Pending']['Groups'] | length == 2
+      when: not ansible_check_mode
     - name: test8 - update group list - same list but different order
       # amazon.aws.mq_user:
       mq_user:
@@ -175,6 +182,7 @@
         fail_msg: test8 failed
         that:
           - not (result.changed | bool)
+      when: not ansible_check_mode
     - name: test9 - update group list - add element
       # amazon.aws.mq_user:
       mq_user:
@@ -193,6 +201,7 @@
         that:
           - result.changed | bool
           - result.user['Pending']['Groups'] | length == 3
+      when: not ansible_check_mode
     - name: test10 - update group list - remove element
       # amazon.aws.mq_user:
       mq_user:
@@ -211,6 +220,7 @@
         that:
           - result.changed | bool
           - result.user['Pending']['Groups'] | length == 2
+      when: not ansible_check_mode
     - name: test11 - update group list - set to empty list
       # amazon.aws.mq_user:
       mq_user:
@@ -229,6 +239,7 @@
         that:
           - result.changed | bool
           - result.user['Pending']['Groups'] | length == 0
+      when: not ansible_check_mode
     - name: delete all users
       # amazon.aws.mq_user:
       mq_user:
@@ -257,3 +268,4 @@
         fail_msg: test13 failed
         that:
           - not(result.changed | bool)
+      when: not ansible_check_mode
