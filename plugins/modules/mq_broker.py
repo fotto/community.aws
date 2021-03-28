@@ -343,7 +343,7 @@ def _needs_change(current, desired):
     for key in desired:
         current_value = current[key]
         desired_value = desired[key]
-        if type(current_value) in [int, str, bool]:
+        if isinstance(current_value, (int, str, bool)):
             if current_value != desired_value:
                 needs_change = True
                 break
