@@ -114,7 +114,14 @@ def get_user_info(conn, module):
         response = conn.list_users(BrokerId=module.params['broker_id'],
                                    MaxResults=module.params['max_results'])
     except (botocore.exceptions.ClientError, botocore.exceptions.BotoCoreError) as e:
-        module.fail_json_aws(e, msg='Failed to describe users')
+        if module.check_mode:
+            # return empty set for unknown broker in check mode
+            if DEFAULTS['as_dict']:
+                return {}
+            else:
+                return []
+        else:
+            module.fail_json_aws(e, msg='Failed to describe users')
     #
     if not module.params['skip_pending_create'] and not module.params['skip_pending_delete']:
         # we can simply return the sub-object from the response

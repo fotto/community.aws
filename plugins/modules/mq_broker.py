@@ -425,13 +425,7 @@ def create_broker(conn, module):
         module.fail_json_aws(RuntimeError, msg="At least one security group must be specified on broker creation")
     #
     changed = True
-    if not module.check_mode:
-        result = conn.create_broker(**kwargs)
-    else:
-        result = {
-            'BrokerArn': 'fakeArn',
-            'BrokerId': 'fakeId'
-        }
+    result = conn.create_broker(**kwargs)
     #
     return {'broker': result, 'changed': changed}
 
@@ -463,7 +457,6 @@ def update_broker(conn, module, broker_id):
     return {'broker': result, 'changed': changed}
 
 
-
 def ensure_absent(conn, module):
     result = {
         'BrokerName': module.params['broker_name'],
@@ -490,6 +483,12 @@ def ensure_absent(conn, module):
 
 
 def ensure_present(conn, module):
+    if module.check_mode:
+        return {'broker': {
+            'BrokerArn': 'fakeArn',
+            'BrokerId': 'fakeId'
+        }, 'changed': True}
+    #
     broker_id = get_broker_id(conn, module)
     if broker_id:
         return update_broker(conn, module, broker_id)
@@ -542,6 +541,10 @@ def main():
         module.exit_json(**compound_result)
     elif module.params['state'] == 'restarted':
         broker_id = get_broker_id(connection, module)
+        if module.check_mode:
+            module.exit_json(broker={
+                'BrokerId': broker_id if broker_id else 'fakeId'
+            }, changed=True)
         if not broker_id:
             module.fail_json_aws(RuntimeError,
                                  msg="Cannot find broker with name {0}.".format(module.params['broker_name']))

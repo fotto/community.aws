@@ -89,7 +89,13 @@ def get_broker_info(conn, module, broker_id):
     try:
         return conn.describe_broker(BrokerId=broker_id)
     except (botocore.exceptions.ClientError, botocore.exceptions.BotoCoreError) as e:
-        module.fail_json_aws(e, msg="Couldn't get broker details.")
+        if module.check_mode:
+            module.exit_json(broker={
+                'BrokerId': broker_id,
+                'BrokerName': 'fakeName'
+            })
+        else:
+            module.fail_json_aws(e, msg="Couldn't get broker details.")
 
 
 def main():
@@ -109,6 +115,12 @@ def main():
     try:
         if not broker_id:
             broker_id = get_broker_id(connection, module)
+        if not broker_id:
+            if module.check_mode:
+                module.exit_json(broker={
+                    'BrokerId': 'fakeId',
+                    'BrokerName': broker_name if broker_name else 'fakeName'
+                })
         result = get_broker_info(connection, module, broker_id)
     except botocore.exceptions.ClientError as e:
         module.fail_json_aws(e)
