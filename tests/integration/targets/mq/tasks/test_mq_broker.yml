@@ -277,4 +277,3 @@
         that:
         - not ( result.changed | bool)
       when: not ansible_check_mode
-
