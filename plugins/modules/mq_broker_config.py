@@ -132,7 +132,12 @@ def get_broker_info(conn, module):
     try:
         return conn.describe_broker(BrokerId=module.params['broker_id'])
     except (botocore.exceptions.ClientError, botocore.exceptions.BotoCoreError) as e:
-        module.fail_json_aws(e, msg="Couldn't get broker details.")
+        if module.check_mode:
+            return {
+                'BrokerId': module.params['broker_id'],
+            }
+        else:
+            module.fail_json_aws(e, msg="Couldn't get broker details.")
 
 
 def get_current_configuration(conn, module, cfg_id, cfg_revision):
@@ -185,16 +190,20 @@ def ensure_config(conn, module):
     broker_id = module.params['broker_id']
     broker_info = get_broker_info(conn, module)
     changed = False
-    current_cfg = broker_info['Configurations']['Current']
-    if 'Pending' in broker_info['Configurations']:
-        current_cfg = broker_info['Configurations']['Pending']
-    current_cfg_encoded = get_current_configuration(conn, module,
-                                                    current_cfg['Id'],
-                                                    current_cfg['Revision'])['Data']
-    if IS_PYTHON3:
-        current_cfg_decoded = base64.b64decode(current_cfg_encoded.encode()).decode()
+    if module.check_mode and 'Configurations' not in broker_info:
+        # not result from get_broker_info(). use requeste config
+        current_cfg_decoded = module.params['config_xml']
     else:
-        current_cfg_decoded = base64.b64decode(current_cfg_encoded)
+        current_cfg = broker_info['Configurations']['Current']
+        if 'Pending' in broker_info['Configurations']:
+            current_cfg = broker_info['Configurations']['Pending']
+        current_cfg_encoded = get_current_configuration(conn, module,
+                                                        current_cfg['Id'],
+                                                        current_cfg['Revision'])['Data']
+        if IS_PYTHON3:
+            current_cfg_decoded = base64.b64decode(current_cfg_encoded.encode()).decode()
+        else:
+            current_cfg_decoded = base64.b64decode(current_cfg_encoded)
     if is_same_config(current_cfg_decoded, module.params['config_xml']):
         return {
             'changed': changed,

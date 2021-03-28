@@ -49,6 +49,7 @@
           - result_c1.broker['BrokerName'] == broker_name
           - result_c1.broker['BrokerState'] == 'CREATION_IN_PROGRESS'
           - ( result_c1.broker['StorageType'] | upper ) == 'EFS'
+      when: not ansible_check_mode
     - debug:
         msg: "Wait until broker {{ broker_name }} ({{ broker_id }}) enters running state. This may take several minutes"
     - name: wait for startup
@@ -63,6 +64,7 @@
       until: result.broker['BrokerState'] == 'RUNNING'
       retries: 15
       delay:   60
+      when: not ansible_check_mode
     - name: repeat creation
       # amazon.aws.mq_broker:
       mq_broker:
@@ -95,6 +97,7 @@
         - result_c2.broker['BrokerId'] == broker_id
         - result_c2.broker['BrokerName'] == broker_name
         - ( result_c2.broker['StorageType'] | upper ) == 'EFS'
+      when: not ansible_check_mode
     - name: update broker
       # amazon.aws.mq_broker:
       mq_broker:
@@ -113,6 +116,7 @@
         that:
         - ( result.changed | bool)
         - result.broker['BrokerId'] == broker_id
+      when: not ansible_check_mode
     - name: reboot broker to make pending changes active
       # amazon.aws.mq_broker:
       mq_broker:
@@ -139,6 +143,7 @@
         that:
           - result.changed | bool
           - result_r1.broker['BrokerState'] == 'REBOOT_IN_PROGRESS'
+      when: not ansible_check_mode
     - debug:
         msg: "Wait until reboot of broker {{ broker_name }} ({{ broker_id }}) is finished. This may take several minutes"
     - name: wait for reboot
@@ -153,6 +158,7 @@
       until: result.broker['BrokerState'] == 'RUNNING'
       retries: 15
       delay:   60
+      when: not ansible_check_mode
     - name: get details after update
       # amazon.aws.mq_broker_info:
       mq_broker_info:
@@ -172,6 +178,7 @@
         - not ( result_u1.broker['AutoMinorVersionUpgrade'] | bool )
         # the next one checks that changes to create-only parameters are silently ignore
         - result_u1.broker['StorageType'] == result_c1.broker['StorageType']
+      when: not ansible_check_mode
     - name: repeat update broker
       # amazon.aws.mq_broker:
       mq_broker:
@@ -201,6 +208,7 @@
         - result_u2.broker['BrokerId'] == result_u1.broker['BrokerId']
         - result_u2.broker['StorageType'] == result_u1.broker['StorageType']
         - result_u2.broker['EngineVersion'] == result_u1.broker['EngineVersion']
+      when: not ansible_check_mode
     # here we can put in tests for mq_broker_config
     - name: delete broker
       # amazon.aws.mq_broker:
@@ -218,6 +226,7 @@
         fail_msg: broker delete failed
         that:
         - ( result.changed | bool)
+      when: not ansible_check_mode
     - name: get details after delete
       # amazon.aws.mq_broker_info:
       mq_broker_info:
@@ -233,6 +242,7 @@
         fail_msg: broker delete too fast?
         that:
         - result_d1.broker['BrokerState'] == 'DELETION_IN_PROGRESS'
+      when: not ansible_check_mode
     - name: repeat broker deletion
       # amazon.aws.mq_broker:
       mq_broker:
@@ -249,6 +259,7 @@
         fail_msg: didn't detect DELETION_IN_PROGRESS in progress
         that:
         - not ( result.changed | bool)
+      when: not ansible_check_mode
     - name: deletion unknown broker - simulates re-deletion of completely deleted broker
       # amazon.aws.mq_broker:
       mq_broker:
@@ -265,4 +276,5 @@
         fail_msg: deletion of unknown broker return unexpected result
         that:
         - not ( result.changed | bool)
+      when: not ansible_check_mode
 

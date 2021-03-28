@@ -53,23 +53,7 @@
         aws_secret_key: "{{ aws_secret_access_key }}"
         security_token: "{{ aws_session_token }}"
       loop: "{{ delete_users | flatten(levels=1) }}"
-    - name: test1 - list all users with custom limit
-      # amazon.aws.mq_user_info:
-      mq_user_info:
-        broker_id: "{{ broker_id }}"
-        region: "{{ aws_region }}"
-        max_results: 5
-        aws_access_key: "{{ aws_access_key_id }}"
-        aws_secret_key: "{{ aws_secret_access_key }}"
-        security_token: "{{ aws_session_token }}"
-      register: result
-    - name: test1 - verify
-      #ansible.builtin.assert:
-      assert:
-        fail_msg: test1 failed
-        that:
-          - (result.users | length) == 5
-    - name: test2 - list all users as dict
+    - name: test2 - list all users
       # amazon.aws.mq_user_info:
       mq_user_info:
         broker_id: "{{ broker_id }}"
@@ -86,6 +70,7 @@
           - result.users['info_user1']
           - result.users['info_user2']
           - result.users['info_user3']
+      when: not ansible_check_mode
     - name: test3 - list only user currently being active until next broker reboot
       # amazon.aws.mq_user_info:
       mq_user_info:
@@ -106,6 +91,7 @@
           - not ('info_user3' in result.users)
           - not ('info_user4' in result.users)
           - result.users['info_user5']
+      when: not ansible_check_mode
     - name: test4 - list only user that will be active after next broker reboot
       # amazon.aws.mq_user_info:
       mq_user_info:
@@ -126,3 +112,4 @@
           - result.users['info_user3']
           - result.users['info_user4']
           - not ('info_user5' in result.users)
+      when: not ansible_check_mode

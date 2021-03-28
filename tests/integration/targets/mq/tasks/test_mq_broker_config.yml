@@ -42,6 +42,7 @@
           - result.broker['BrokerId'] == broker_id
           - result.configuration['id'] == result.broker['Configurations']['Pending']['Id']
           - result.configuration['revision'] == result.broker['Configurations']['Pending']['Revision']
+      when: not ansible_check_mode
     - name: test 2 - send (almost) same config again
       # amazon.aws.mq_broker_info:
       mq_broker_config:
@@ -58,6 +59,7 @@
         fail_msg: test2 failed
         that:
           - not (result.changed | bool )
+      when: not ansible_check_mode
     - name: test 3 - send new config with custom description and request reboot
       # amazon.aws.mq_broker_info:
       mq_broker_config:
@@ -77,3 +79,4 @@
         that:
           - result.changed | bool
           - result.broker['BrokerState'] == 'REBOOT_IN_PROGRESS'
+      when: not ansible_check_mode
