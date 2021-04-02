@@ -2,30 +2,34 @@
 - name: MQ User test suite
   hosts: dummy
   gather_facts: false
+  module_defaults:
+    mq_broker:
+      aws_access_key: "{{ lookup('env', 'AWS_ACCESS_KEY_ID') }}"
+      aws_secret_key: "{{ lookup('env', 'AWS_SECRET_ACCESS_KEY') }}"
+      security_token: "{{ lookup('env', 'AWS_SESSION_TOKEN') | default('omit') }}"
+      aws_region: "{{ lookup('env', 'AWS_REGION') }}"
+    mq_broker_info:
+      aws_access_key: "{{ lookup('env', 'AWS_ACCESS_KEY_ID') }}"
+      aws_secret_key: "{{ lookup('env', 'AWS_SECRET_ACCESS_KEY') }}"
+      security_token: "{{ lookup('env', 'AWS_SESSION_TOKEN') | default('omit') }}"
+      aws_region: "{{ lookup('env', 'AWS_REGION') }}"
   vars:
     broker_name: "{{ lookup('env', 'MQ_BROKER_NAME') | default('mq_broker_ci') }}"
     broker_sg_ids: "{{ lookup('env', 'MQ_SG_IDS') | default('') }}"
     broker_subnet_ids: "{{ lookup('env', 'MQ_SUBNET_IDS') | default('') }}"
-    aws_access_key_id: "{{ lookup('env', 'AWS_ACCESS_KEY_ID') }}"
-    aws_secret_access_key: "{{ lookup('env', 'AWS_SECRET_ACCESS_KEY') }}"
-    aws_session_token: "{{ lookup('env', 'AWS_SESSION_TOKEN') }}"
-    aws_region: "{{ lookup('env', 'AWS_REGION') }}"
 
 
   tasks:
+  - block:
     - name: show env
       debug:
-        msg: "Will run tests against broker '{{ broker_name }}' in AWS region '{{ aws_region }}'"
+        msg: "Will run tests against broker '{{ broker_name }}'"
     - name: create broker with minimal parameters
       # amazon.aws.mq_broker:
       mq_broker:
         broker_name: "{{ broker_name }}"
-        region: "{{ aws_region }}"
         security_groups: "{{ broker_sg_ids.split(',') }}"
         subnet_ids: "{{ broker_subnet_ids.split(',') }}"
-        aws_access_key: "{{ aws_access_key_id }}"
-        aws_secret_key: "{{ aws_secret_access_key }}"
-        security_token: "{{ aws_session_token }}"
       register: result
     - set_fact:
         broker_id: "{{ result.broker['BrokerId'] }}"
@@ -33,10 +37,6 @@
       # amazon.aws.mq_broker_info:
       mq_broker_info:
         broker_id: "{{ broker_id }}"
-        region: "{{ aws_region }}"
-        aws_access_key: "{{ aws_access_key_id }}"
-        aws_secret_key: "{{ aws_secret_access_key }}"
-        security_token: "{{ aws_session_token }}"
       register: result_c1
     - name: verify creation result
       #ansible.builtin.assert:
@@ -56,10 +56,6 @@
       # amazon.aws.mq_broker_info:
       mq_broker_info:
         broker_id:      "{{ broker_id }}"
-        region:         "{{ aws_region }}"
-        aws_access_key: "{{ aws_access_key_id }}"
-        aws_secret_key: "{{ aws_secret_access_key }}"
-        security_token: "{{ aws_session_token }}"
       register: result
       until: result.broker['BrokerState'] == 'RUNNING'
       retries: 15
@@ -69,12 +65,8 @@
       # amazon.aws.mq_broker:
       mq_broker:
         broker_name: "{{ broker_name }}"
-        region: "{{ aws_region }}"
         security_groups: "{{ broker_sg_ids.split(',') }}"
         subnet_ids: "{{ broker_subnet_ids.split(',') }}"
-        aws_access_key: "{{ aws_access_key_id }}"
-        aws_secret_key: "{{ aws_secret_access_key }}"
-        security_token: "{{ aws_session_token }}"
       register: result
     - set_fact:
         broker_id: "{{ result.broker['BrokerId'] }}"
@@ -82,10 +74,6 @@
       # amazon.aws.mq_broker_info:
       mq_broker_info:
         broker_name: "{{ broker_name }}"
-        region: "{{ aws_region }}"
-        aws_access_key: "{{ aws_access_key_id }}"
-        aws_secret_key: "{{ aws_secret_access_key }}"
-        security_token: "{{ aws_session_token }}"
       register: result_c2
     - name: verify broker re-creation
       #ansible.builtin.assert:
@@ -102,12 +90,8 @@
       # amazon.aws.mq_broker:
       mq_broker:
         broker_name: "{{ broker_name }}"
-        region:          "{{ aws_region }}"
         auto_minor_version_upgrade: false
         storage_type: EBS
-        aws_access_key:  "{{ aws_access_key_id }}"
-        aws_secret_key:  "{{ aws_secret_access_key }}"
-        security_token: "{{ aws_session_token }}"
       register: result
     - name: verify broker update
       #ansible.builtin.assert:
@@ -122,19 +106,11 @@
       mq_broker:
         broker_name: "{{ broker_name }}"
         state: "restarted"
-        region: "{{ aws_region }}"
-        aws_access_key: "{{ aws_access_key_id }}"
-        aws_secret_key: "{{ aws_secret_access_key }}"
-        security_token: "{{ aws_session_token }}"
       register: result
     - name: get broker details by id
       # amazon.aws.mq_broker_info:
       mq_broker_info:
         broker_id: "{{ broker_id }}"
-        region: "{{ aws_region }}"
-        aws_access_key: "{{ aws_access_key_id }}"
-        aws_secret_key: "{{ aws_secret_access_key }}"
-        security_token: "{{ aws_session_token }}"
       register: result_r1
     - name: check for pending reboot
       #ansible.builtin.assert:
@@ -150,10 +126,6 @@
       # amazon.aws.mq_broker_info:
       mq_broker_info:
         broker_id:      "{{ broker_id }}"
-        region:         "{{ aws_region }}"
-        aws_access_key: "{{ aws_access_key_id }}"
-        aws_secret_key: "{{ aws_secret_access_key }}"
-        security_token: "{{ aws_session_token }}"
       register: result
       until: result.broker['BrokerState'] == 'RUNNING'
       retries: 15
@@ -163,10 +135,6 @@
       # amazon.aws.mq_broker_info:
       mq_broker_info:
         broker_name: "{{ broker_name }}"
-        region: "{{ aws_region }}"
-        aws_access_key: "{{ aws_access_key_id }}"
-        aws_secret_key: "{{ aws_secret_access_key }}"
-        security_token: "{{ aws_session_token }}"
       register: result_u1
     - name: verify broker update
       #ansible.builtin.assert:
@@ -183,21 +151,13 @@
       # amazon.aws.mq_broker:
       mq_broker:
         broker_name: "{{ broker_name }}"
-        region:          "{{ aws_region }}"
         auto_minor_version_upgrade: false
         storage_type: EBS
-        aws_access_key:  "{{ aws_access_key_id }}"
-        aws_secret_key:  "{{ aws_secret_access_key }}"
-        security_token: "{{ aws_session_token }}"
       register: result
     - name: get details after re-update
       # amazon.aws.mq_broker_info:
       mq_broker_info:
         broker_name: "{{ broker_name }}"
-        region: "{{ aws_region }}"
-        aws_access_key: "{{ aws_access_key_id }}"
-        aws_secret_key: "{{ aws_secret_access_key }}"
-        security_token: "{{ aws_session_token }}"
       register: result_u2
     - name: verify broker re-update
       #ansible.builtin.assert:
@@ -215,10 +175,6 @@
       mq_broker:
         broker_name: "{{ broker_name }}"
         state: "absent"
-        region: "{{ aws_region }}"
-        aws_access_key: "{{ aws_access_key_id }}"
-        aws_secret_key: "{{ aws_secret_access_key }}"
-        security_token: "{{ aws_session_token }}"
       register: result
     - name: verify broker delete
       #ansible.builtin.assert:
@@ -231,10 +187,6 @@
       # amazon.aws.mq_broker_info:
       mq_broker_info:
         broker_name: "{{ broker_name }}"
-        region: "{{ aws_region }}"
-        aws_access_key: "{{ aws_access_key_id }}"
-        aws_secret_key: "{{ aws_secret_access_key }}"
-        security_token: "{{ aws_session_token }}"
       register: result_d1
     - name: verify broker deletion on progress
       #ansible.builtin.assert:
@@ -248,10 +200,6 @@
       mq_broker:
         broker_name: "{{ broker_name }}"
         state: "absent"
-        region: "{{ aws_region }}"
-        aws_access_key: "{{ aws_access_key_id }}"
-        aws_secret_key: "{{ aws_secret_access_key }}"
-        security_token: "{{ aws_session_token }}"
       register: result
     - name: verify broker repeated delete
       #ansible.builtin.assert:
@@ -261,14 +209,10 @@
         - not ( result.changed | bool)
       when: not ansible_check_mode
     - name: deletion unknown broker - simulates re-deletion of completely deleted broker
-      # amazon.aws.mq_broker:
+      # amazon.aws.mq_broker:tests/integration/targets/mq/tasks/test_mq_broker.yml
       mq_broker:
         broker_name: "{{ broker_name }}__unknown_broker__"
         state: "absent"
-        region: "{{ aws_region }}"
-        aws_access_key: "{{ aws_access_key_id }}"
-        aws_secret_key: "{{ aws_secret_access_key }}"
-        security_token: "{{ aws_session_token }}"
       register: result
     - name: verify delete unknown broker
       #ansible.builtin.assert:
@@ -277,3 +221,10 @@
         that:
         - not ( result.changed | bool)
       when: not ansible_check_mode
+    always:
+    - name: delete broker on failure
+      # amazon.aws.mq_broker:
+      mq_broker:
+        broker_name: "{{ broker_name }}"
+        state: "absent"
+      register: result
