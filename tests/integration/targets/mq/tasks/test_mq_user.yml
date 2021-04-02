@@ -2,39 +2,61 @@
 - name: MQ User test suite
   hosts: dummy
   gather_facts: false
+  module_defaults:
+    mq_broker:
+      aws_access_key: "{{ lookup('env', 'AWS_ACCESS_KEY_ID') }}"
+      aws_secret_key: "{{ lookup('env', 'AWS_SECRET_ACCESS_KEY') }}"
+      security_token: "{{ lookup('env', 'AWS_SESSION_TOKEN') | default('omit') }}"
+      aws_region: "{{ lookup('env', 'AWS_REGION') }}"
+    mq_broker_info:
+      aws_access_key: "{{ lookup('env', 'AWS_ACCESS_KEY_ID') }}"
+      aws_secret_key: "{{ lookup('env', 'AWS_SECRET_ACCESS_KEY') }}"
+      security_token: "{{ lookup('env', 'AWS_SESSION_TOKEN') | default('omit') }}"
+      aws_region: "{{ lookup('env', 'AWS_REGION') }}"
+    mq_user:
+      aws_access_key: "{{ lookup('env', 'AWS_ACCESS_KEY_ID') }}"
+      aws_secret_key: "{{ lookup('env', 'AWS_SECRET_ACCESS_KEY') }}"
+      security_token: "{{ lookup('env', 'AWS_SESSION_TOKEN') | default('omit') }}"
+      aws_region: "{{ lookup('env', 'AWS_REGION') }}"
   vars:
     broker_name: "{{ lookup('env', 'MQ_BROKER_NAME') }}"
-    aws_access_key_id: "{{ lookup('env', 'AWS_ACCESS_KEY_ID') }}"
-    aws_secret_access_key: "{{ lookup('env', 'AWS_SECRET_ACCESS_KEY') }}"
-    aws_session_token: "{{ lookup('env', 'AWS_SESSION_TOKEN') }}"
-    aws_region: "{{ lookup('env', 'AWS_REGION') }}"
+    broker_sg_ids: "{{ lookup('env', 'MQ_SG_IDS') | default('') }}"
+    broker_subnet_ids: "{{ lookup('env', 'MQ_SUBNET_IDS') | default('') }}"
     usernames:
       - "test_user1"
       - "test_user2"
       - "test_user3"
 
   tasks:
+  - block:
     - name: show env
       debug:
-        msg: "Will run tests against broker '{{ broker_name }}' in AWS region '{{ aws_region }}'"
-    - name: determine broker_id
-      mq_broker_info:
-        broker_name:      "{{ broker_name }}"
-        region:         "{{ aws_region }}"
-        aws_access_key: "{{ aws_access_key_id }}"
-        aws_secret_key: "{{ aws_secret_access_key }}"
-      register:       result
+        msg: "Will run tests against broker '{{ broker_name }}'"
+    - name: create broker for user info tests
+      # amazon.aws.mq_broker:
+      mq_broker:
+        broker_name: "{{ broker_name }}"
+        security_groups: "{{ broker_sg_ids.split(',') }}"
+        subnet_ids: "{{ broker_subnet_ids.split(',') }}"
+      register: result
     - set_fact:
         broker_id: "{{ result.broker['BrokerId'] }}"
+    - debug:
+        msg: "Wait until broker {{ broker_name }} ({{ broker_id }}) enters running state. This may take several minutes"
+    - name: wait for startup
+      # amazon.aws.mq_broker_info:
+      mq_broker_info:
+        broker_id:      "{{ broker_id }}"
+      register: result
+      until: result.broker['BrokerState'] == 'RUNNING'
+      retries: 15
+      delay:   60
+      when: not ansible_check_mode
     - name: test1 - create user with default settings
       # amazon.aws.mq_user:
       mq_user:
         broker_id: "{{ broker_id }}"
         username: "{{ usernames[0] }}"
-        region: "{{ aws_region }}"
-        aws_access_key: "{{ aws_access_key_id }}"
-        aws_secret_key: "{{ aws_secret_access_key }}"
-        security_token: "{{ aws_session_token }}"
       register: result
     - name: test1 - verify
       #ansible.builtin.assert:
@@ -52,12 +74,8 @@
         state: present
         broker_id: "{{ broker_id }}"
         username: "{{ usernames[1] }}"
-        region: "{{ aws_region }}"
         console_access: true
         groups: [ "g1", "g2" ]
-        aws_access_key: "{{ aws_access_key_id }}"
-        aws_secret_key: "{{ aws_secret_access_key }}"
-        security_token: "{{ aws_session_token }}"
       register: result
     - name: test2 - verify
       #ansible.builtin.assert:
@@ -74,11 +92,7 @@
       mq_user:
         broker_id: "{{ broker_id }}"
         username: "{{ usernames[2] }}"
-        region: "{{ aws_region }}"
         password: "09234092jzxkjvjk23kn23qn5lk34"
-        aws_access_key: "{{ aws_access_key_id }}"
-        aws_secret_key: "{{ aws_secret_access_key }}"
-        security_token: "{{ aws_session_token }}"
       register: result
     - name: test3 - verify
       #ansible.builtin.assert:
@@ -95,11 +109,7 @@
       mq_user:
         broker_id: "{{ broker_id }}"
         username: "{{ usernames[2] }}"
-        region: "{{ aws_region }}"
         password: "new_password_ignored"
-        aws_access_key: "{{ aws_access_key_id }}"
-        aws_secret_key: "{{ aws_secret_access_key }}"
-        security_token: "{{ aws_session_token }}"
       register: result
     - name: test4 - verify
       #ansible.builtin.assert:
@@ -113,12 +123,8 @@
       mq_user:
         broker_id: "{{ broker_id }}"
         username: "{{ usernames[2] }}"
-        region: "{{ aws_region }}"
         password: "new_Password_Accepted0815%"
         allow_pw_update: true
-        aws_access_key: "{{ aws_access_key_id }}"
-        aws_secret_key: "{{ aws_secret_access_key }}"
-        security_token: "{{ aws_session_token }}"
       register: result
     - name: test5 - verify
       #ansible.builtin.assert:
@@ -132,11 +138,7 @@
       mq_user:
         broker_id: "{{ broker_id }}"
         username: "{{ usernames[2] }}"
-        region: "{{ aws_region }}"
         console_access: false
-        aws_access_key: "{{ aws_access_key_id }}"
-        aws_secret_key: "{{ aws_secret_access_key }}"
-        security_token: "{{ aws_session_token }}"
       register: result
     - name: test6 - verify
       #ansible.builtin.assert:
@@ -150,11 +152,7 @@
       mq_user:
         broker_id: "{{ broker_id }}"
         username: "{{ usernames[1] }}"
-        region: "{{ aws_region }}"
         console_access: false
-        aws_access_key: "{{ aws_access_key_id }}"
-        aws_secret_key: "{{ aws_secret_access_key }}"
-        security_token: "{{ aws_session_token }}"
       register: result
     - name: test7 - verify
       #ansible.builtin.assert:
@@ -170,11 +168,7 @@
       mq_user:
         broker_id: "{{ broker_id }}"
         username: "{{ usernames[1] }}"
-        region: "{{ aws_region }}"
         groups: [ "g2", "g1" ]
-        aws_access_key: "{{ aws_access_key_id }}"
-        aws_secret_key: "{{ aws_secret_access_key }}"
-        security_token: "{{ aws_session_token }}"
       register: result
     - name: test8 - verify
       #ansible.builtin.assert:
@@ -188,11 +182,7 @@
       mq_user:
         broker_id: "{{ broker_id }}"
         username: "{{ usernames[1] }}"
-        region: "{{ aws_region }}"
         groups: [ "g2", "g1", "g3" ]
-        aws_access_key: "{{ aws_access_key_id }}"
-        aws_secret_key: "{{ aws_secret_access_key }}"
-        security_token: "{{ aws_session_token }}"
       register: result
     - name: test9 - verify
       #ansible.builtin.assert:
@@ -207,11 +197,7 @@
       mq_user:
         broker_id: "{{ broker_id }}"
         username: "{{ usernames[1] }}"
-        region: "{{ aws_region }}"
         groups: [ "g2", "g3" ]
-        aws_access_key: "{{ aws_access_key_id }}"
-        aws_secret_key: "{{ aws_secret_access_key }}"
-        security_token: "{{ aws_session_token }}"
       register: result
     - name: test10 - verify
       #ansible.builtin.assert:
@@ -226,11 +212,7 @@
       mq_user:
         broker_id: "{{ broker_id }}"
         username: "{{ usernames[1] }}"
-        region: "{{ aws_region }}"
         groups: []
-        aws_access_key: "{{ aws_access_key_id }}"
-        aws_secret_key: "{{ aws_secret_access_key }}"
-        security_token: "{{ aws_session_token }}"
       register: result
     - name: test11 - verify
       #ansible.builtin.assert:
@@ -246,10 +228,6 @@
         state: absent
         broker_id: "{{ broker_id }}"
         username: "{{ item }}"
-        region: "{{ aws_region }}"
-        aws_access_key: "{{ aws_access_key_id }}"
-        aws_secret_key: "{{ aws_secret_access_key }}"
-        security_token: "{{ aws_session_token }}"
       loop: "{{ usernames | flatten(levels=1) }}"
     - name: test13 - delete deleted user
       # amazon.aws.mq_user:
@@ -257,10 +235,6 @@
         state: absent
         broker_id: "{{ broker_id }}"
         username: "{{ usernames[1] }}"
-        region: "{{ aws_region }}"
-        aws_access_key: "{{ aws_access_key_id }}"
-        aws_secret_key: "{{ aws_secret_access_key }}"
-        security_token: "{{ aws_session_token }}"
       register: result
     - name: test13 - verify
       #ansible.builtin.assert:
@@ -269,3 +243,10 @@
         that:
           - not(result.changed | bool)
       when: not ansible_check_mode
+    always:
+    - name: cleanup broker
+      # amazon.aws.mq_broker:
+      mq_broker:
+        broker_name: "{{ broker_name }}"
+        state: "absent"
+      register: result
