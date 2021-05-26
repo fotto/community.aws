@@ -1,4 +1,3 @@
-
 - name: remove the security group
   ec2_group:
     name: "{{ sg_name }}"
