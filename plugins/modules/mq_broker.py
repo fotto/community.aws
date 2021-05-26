@@ -106,7 +106,10 @@ options:
     type: bool
     default: true
   engine_version:
-    description: set engine version of broker
+    description:
+    - set engine version of broker
+    - the special value 'latest' will pick the latest available version
+    - the special value 'latest' is ignored on update
     type: str
   host_instance_type:
     description: instance type of broker instances
@@ -257,7 +260,7 @@ DEFAULTS = {
     'deployment_mode': 'SINGLE_INSTANCE',
     'use_aws_owned_key': True,
     'engine_type': 'ACTIVEMQ',
-    'engine_version': '5.15.13',
+    'engine_version': 'latest',
     'host_instance_type': 'mq.t3.micro',
     'enable_audit_log': False,
     'enable_general_log': False,
@@ -303,7 +306,7 @@ def _fill_kwargs(module, apply_defaults=True, ignore_create_params=False):
             _set_kwarg(kwargs, p_name, DEFAULTS[p_name])
     for p_name in module.params:
         if ignore_create_params and p_name in CREATE_ONLY_PARAMS:
-            # silently ignore CREATE_ONLY_PARAMS on updated to
+            # silently ignore CREATE_ONLY_PARAMS on update to
             # make playbooks idempotent
             continue
         if p_name in PARAMS_MAP and module.params[p_name] is not None:
@@ -365,6 +368,16 @@ def _needs_change(current, desired):
     return needs_change
 
 
+def get_latest_engine_version(conn, module, engine_type):
+    try:
+        response = conn.describe_broker_engine_types(
+            EngineType=engine_type
+        )
+        return response['BrokerEngineTypes'][0]['EngineVersions'][0]['Name']
+    except (botocore.exceptions.ClientError, botocore.exceptions.BotoCoreError) as e:
+        module.fail_json_aws(e, msg="Couldn't list engine versions")
+
+
 def get_broker_id(conn, module):
     try:
         broker_name = module.params['broker_name']
@@ -406,6 +419,10 @@ def delete_broker(conn, module, broker_id):
 
 def create_broker(conn, module):
     kwargs = _fill_kwargs(module)
+    if 'EngineVersion' in kwargs and kwargs['EngineVersion'] == 'latest':
+        kwargs['EngineVersion'] = get_latest_engine_version(
+            conn, module, kwargs['EngineType']
+        )
     if kwargs['AuthenticationStrategy'] == 'LDAP':
         module.fail_json_aws(RuntimeError, msg="'AuthenticationStrategy=LDAP' not supported, yet")
     if 'Users' not in kwargs:
@@ -443,6 +460,10 @@ def update_broker(conn, module, broker_id):
                              msg="Cannot trigger update while broker ({0}) is in state {1}".format(
                                  broker_id, api_result['BrokerState']
                              ))
+    # engine version of 'latest' is taken as "keep current one"
+    # i.e. do not request upgrade on playbook rerun
+    if 'EngineVersion' in kwargs and kwargs['EngineVersion'] == 'latest':
+        kwargs['EngineVersion'] = api_result['EngineVersion']
     result = {
         'BrokerId': broker_id,
         'BrokerName': broker_name
