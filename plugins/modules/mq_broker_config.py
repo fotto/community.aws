@@ -9,42 +9,38 @@ __metaclass__ = type
 DOCUMENTATION = '''
 ---
 module: mq_broker_config
-version_added: 0.9.0
+version_added: 4.1.0
 short_description: Update Amazon MQ broker configuration
 description:
-  - "Update configuration for an MQ broker."
-  - "If new configuration differs from the current one: a new configuration "
-  - "is created and the new version is assigned to the broker."
-  - "Optionally allows broker reboot to make changes effective immediately"
-author: FCO (@fotto)
-requirements:
-  - boto3
-  - botocore
+  - Update configuration for an MQ broker.
+  - If new configuration differs from the current one a new configuration
+    is created and the new version is assigned to the broker.
+  - Optionally allows broker reboot to make changes effective immediately.
+author:
+  - FCO (@fotto)
 options:
   broker_id:
     description:
-      - "The ID of the MQ broker to work on"
+      - The ID of the MQ broker to work on.
     type: str
     required: true
   config_xml:
     description:
-      - "The maximum number of results to return"
+      - The maximum number of results to return.
     type: str
     required: true
   config_description:
     description:
-      - "Description to set on new configuration revision"
+      - Description to set on new configuration revision.
     type: str
   reboot:
     description:
-      - "Reboot broker after new config has been applied"
+      - Reboot broker after new config has been applied.
     type: bool
     default: false
-
 extends_documentation_fragment:
-- amazon.aws.aws
-- amazon.aws.ec2
-
+  - amazon.aws.aws
+  - amazon.aws.ec2
 '''
 
 EXAMPLES = '''
@@ -62,30 +58,26 @@ EXAMPLES = '''
   amazon.aws.mq_broker_config:
     broker_id: "{{ broker_id }}"
     config_xml: "{{ lookup('file', 'activemq3.xml')}}"
-    config_description: "custom description for configuration objectg"
-    region: "{{ aws_region }}"
-    aws_access_key: "{{ aws_access_key_id }}"
-    aws_secret_key: "{{ aws_secret_access_key }}"
-    security_token: "{{ aws_session_token }}"
+    config_description: "custom description for configuration object"
     register: result
 '''
 
 RETURN = '''
 broker:
-  description: API response of describe_broker() after changes have been applied
+  description: API response of describe_broker() after changes have been applied.
   type: dict
   returned: success
 configuration:
-  description: details about new configuration object
+  description: Details about new configuration object.
   returned: I(changed=true)
   type: complex
   contains:
     id:
-      description: configuration ID of broker configuration
+      description: Configuration ID of broker configuration.
       type: str
       example: c-386541b8-3139-42c2-9c2c-a4c267c1714f
     revision:
-      description: revision of the configuration that will be active after next reboot
+      description: Revision of the configuration that will be active after next reboot.
       type: int
       example: 4
 '''
@@ -93,12 +85,6 @@ configuration:
 import base64
 import re
 import sys
-IS_PYTHON3 = True
-if sys.hexversion < 34013184:
-    # python2.6 hack
-    IS_PYTHON3 = False
-elif sys.version_info.major < 3:
-    IS_PYTHON3 = False
 
 try:
     import botocore
@@ -106,12 +92,7 @@ except ImportError as ex:
     # handled by AnsibleAWSModule
     pass
 
-try:
-    # use different package reference to make it work in community.aws. original line
-    # from ansible.module_utils.core import AnsibleAWSModule
-    from ansible_collections.amazon.aws.plugins.module_utils.core import AnsibleAWSModule
-except ImportError as ex:
-    raise ex
+from ansible_collections.amazon.aws.plugins.module_utils.core import AnsibleAWSModule
 
 
 DEFAULTS = {
@@ -200,10 +181,7 @@ def ensure_config(conn, module):
         current_cfg_encoded = get_current_configuration(conn, module,
                                                         current_cfg['Id'],
                                                         current_cfg['Revision'])['Data']
-        if IS_PYTHON3:
-            current_cfg_decoded = base64.b64decode(current_cfg_encoded.encode()).decode()
-        else:
-            current_cfg_decoded = base64.b64decode(current_cfg_encoded)
+        current_cfg_decoded = base64.b64decode(current_cfg_encoded.encode()).decode()
     if is_same_config(current_cfg_decoded, module.params['config_xml']):
         return {
             'changed': changed,
@@ -212,10 +190,7 @@ def ensure_config(conn, module):
     else:
         (c_response, b_response) = (None, None)
         if not module.check_mode:
-            if IS_PYTHON3:
-                new_cfg_encoded = base64.b64encode(module.params['config_xml'].encode()).decode()
-            else:
-                new_cfg_encoded = base64.b64encode(module.params['config_xml'])
+            new_cfg_encoded = base64.b64encode(module.params['config_xml'].encode()).decode()
             (c_response, b_response) = create_and_assign_config(conn, module,
                                                                 broker_id,
                                                                 current_cfg['Id'],

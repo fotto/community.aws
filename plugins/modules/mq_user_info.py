@@ -9,45 +9,43 @@ __metaclass__ = type
 DOCUMENTATION = '''
 ---
 module: mq_user_info
-version_added: 0.9.0
+version_added: 4.1.0
 short_description: List users of an Amazon MQ broker
 description:
-  - list users for the specified broker id
-  - Pending creations and deletions can be skipped by options
-author: FCO (@fotto)
-requirements:
-  - boto3
-  - botocore
+  - List users for the specified broker ID.
+  - Pending creations and deletions can be skipped by options.
+author:
+  - FCO (@fotto)
 options:
   broker_id:
     description:
-      - "The ID of the MQ broker to work on"
+      - The ID of the MQ broker to work on.
     type: str
     required: true
   max_results:
     description:
-      - "The maximum number of results to return"
+      - The maximum number of results to return.
     type: int
     default: 100
   skip_pending_create:
     description:
-      - "Will skip pending creates from the result set"
+      - Will skip pending creates from the result set.
     type: bool
     default: false
   skip_pending_delete:
     description:
-      - "Will skip pending deletes from the result set"
+      - Will skip pending deletes from the result set.
     type: bool
     default: false
   as_dict:
     description:
-      - "convert result into lookup table by username"
+      - Convert result into lookup table by username.
     type: bool
     default: false
 
 extends_documentation_fragment:
-- amazon.aws.aws
-- amazon.aws.ec2
+  - amazon.aws.aws
+  - amazon.aws.ec2
 '''
 
 
@@ -56,26 +54,19 @@ EXAMPLES = '''
   amazon.aws.mq_user_info:
     broker_id: "aws-mq-broker-id"
     max_results: 50
-    region: "{{ aws_region }}"
   register: result
 - name: get users as dict - explicitly specifying all credentials
   amazon.aws.mq_user_info:
     broker_id: "aws-mq-broker-id"
-    region: "{{ aws_region }}"
-    aws_access_key: "{{ aws_access_key_id }}"
-    aws_secret_key: "{{ aws_secret_access_key }}"
-    security_token: "{{ aws_session_token }}"
   register: result
 - name: get list of users to decide which may need to be deleted
   amazon.aws.mq_user_info:
     broker_id: "aws-mq-broker-id"
     skip_pending_delete: true
-    region: "{{ aws_region }}"
 - name: get list of users to decide which may need to be created
   amazon.aws.mq_user_info:
     broker_id: "aws-mq-broker-id"
     skip_pending_create: true
-    region: "{{ aws_region }}"
 '''
 
 RETURN = '''
@@ -83,8 +74,8 @@ users:
     type: dict
     returned: success
     description:
-    - dict key is username
-    - each entry is the record for a user as returned by API
+      - dict key is username
+      - each entry is the record for a user as returned by API
 '''
 
 try:
@@ -93,12 +84,7 @@ except ImportError as ex:
     # handled by AnsibleAWSModule
     pass
 
-try:
-    # use different package reference to make it work in community.aws. original line
-    # from ansible.module_utils.core import AnsibleAWSModule
-    from ansible_collections.amazon.aws.plugins.module_utils.core import AnsibleAWSModule
-except ImportError as ex:
-    raise ex
+from ansible_collections.amazon.aws.plugins.module_utils.core import AnsibleAWSModule
 
 
 DEFAULTS = {

@@ -9,65 +9,56 @@ __metaclass__ = type
 DOCUMENTATION = '''
 ---
 module: mq_user
-version_added: 0.9.0
+version_added: 4.1.0
 short_description: Manage users in existing Amazon MQ broker
 description:
-- Manage Amazon MQ users.
-- "pending changes are taking into account, i.e. "
-- "if you update a user without rebooting the broker then running "
-- "that operation a 2nd type (without reboot) will yield 'changed=false'."
-- "see 'options' seconds to learn about password handling"
+  - Manage Amazon MQ users.
+  - Pending changes are taking into account for idempotency.
 author:
-- FCO (@fotto)
-requirements: [ boto3 ]
+  - FCO (@fotto)
 options:
   broker_id:
     description:
-      - "The ID of the MQ broker to work on"
+      - The ID of the MQ broker to work on.
     type: str
     required: true
   username:
     description:
-      - "The name of the user to create/update/delete"
+      - The name of the user to create/update/delete.
     type: str
     required: true
   state:
     description:
-      - "Create/Update vs Delete of user."
+      - Create/Update vs Delete of user.
     default: present
     choices: [ 'present', 'absent' ]
     type: str
   console_access:
     description:
-      - "True: user can use MQ Console."
-      - "Will not be changed on update unless explicitly defined"
-      - "default on create: false"
+      - Whether the user can access the MQ Console.
+      - Defaults to C(false) on creation.
     type: bool
   groups:
     description:
-      - "Set group memberships for user"
-      - "Will not be changed on update unless explicitly defined"
-      - "default on create: empty list"
+      - Set group memberships for user.
+      - Defaults to C([]) on creation.
     type: list
     elements: str
   password:
     description:
-      - "Set password for user"
-      - "on create: if not defined a random password will be set"
-      - "on update: will be ignored unless 'allow_pw_update' is set to true"
+      - Set password for user.
+      - Defaults to a random password on creation.
+      - Ignored unless I(allow_pw_update=true).
     type: str
   allow_pw_update:
     description:
-      - "Only used of 'password' parameter set for existing user"
+      - When I(allow_pw_update=true) and I(password) is set, the password
+        will always be updated for the user.
     default: false
     type: bool
-  region:
-    description:
-    - set AWS region for API operations
-    type: str
 extends_documentation_fragment:
-- amazon.aws.aws
-- amazon.aws.ec2
+  - amazon.aws.aws
+  - amazon.aws.ec2
 '''
 
 EXAMPLES = '''
@@ -75,7 +66,6 @@ EXAMPLES = '''
   amazon.aws.mq_user:
     state: present
     broker_id: "aws-mq-broker-id"
-    region: "{{ aws_region }}"
     username: "sample_user1"
     console_access: false
     groups: [ "g1", "g2" ]
@@ -92,35 +82,19 @@ EXAMPLES = '''
     state: absent
     broker_id: "aws-mq-broker-id"
     username: "other_user"
-    region: "{{ aws_region }}"
-    aws_access_key: "{{ aws_access_key_id }}"
-    aws_secret_key: "{{ aws_secret_access_key }}"
-    security_token: "{{ aws_session_token }}"
 '''
 
 RETURN = '''
 user:
     description:
-    - just echos the username
-    - "only present when state=present"
+      - just echos the username
+      - "only present when state=present"
     type: str
     returned: success
 '''
 
+import secrets
 import sys
-IS_PYTHON36 = True
-if sys.hexversion < 34013184:
-    # python2.6 hack
-    IS_PYTHON36 = False
-else:
-    if sys.version_info.major < 3 or sys.version_info.minor < 6:
-        IS_PYTHON36 = False
-
-if IS_PYTHON36:
-    import secrets
-else:
-    import random
-    import hashlib
 
 try:
     import botocore
@@ -128,12 +102,7 @@ except ImportError as ex:
     # handled by AnsibleAWSModule
     pass
 
-try:
-    # use different package reference to make it work in community.aws. original line
-    # from ansible.module_utils.core import AnsibleAWSModule
-    from ansible_collections.amazon.aws.plugins.module_utils.core import AnsibleAWSModule
-except ImportError as ex:
-    raise ex
+from ansible_collections.amazon.aws.plugins.module_utils.core import AnsibleAWSModule
 
 CREATE_DEFAULTS = {
     'console_access': False,
@@ -169,16 +138,7 @@ def _console_access_change_required(user_response, requested_boolean):
 
 
 def generate_password():
-    if IS_PYTHON36:
-        return secrets.token_hex(20)
-    # python2.7:
-    in_str = ''
-    for i in range(0, 19):
-        in_str += str(random.randint(10000, 99999))
-    #
-    h = hashlib.md5()
-    h.update(in_str)
-    return h.hexdigest()
+    return secrets.token_hex(20)
 
 
 # returns API response object

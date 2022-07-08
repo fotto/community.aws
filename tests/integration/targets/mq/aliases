@@ -4,8 +4,8 @@
 # tests run about 30 minutes
 unsupported
 
-
 cloud/aws
+
 mq_broker_info
 mq_broker
 mq_broker_config
