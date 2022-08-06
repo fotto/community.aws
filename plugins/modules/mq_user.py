@@ -103,6 +103,7 @@ except ImportError as ex:
     pass
 
 from ansible_collections.amazon.aws.plugins.module_utils.core import AnsibleAWSModule
+from ansible.module_utils.common.dict_transformations import camel_dict_to_snake_dict
 
 CREATE_DEFAULTS = {
     'console_access': False,
@@ -220,7 +221,7 @@ def ensure_user_present(conn, module):
 
     return {
         'changed': changed,
-        'user': user
+        'user': camel_dict_to_snake_dict(user, ignore_list=['Tags'])
     }
 
 

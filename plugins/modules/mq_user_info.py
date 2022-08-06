@@ -83,6 +83,7 @@ except ImportError as ex:
     pass
 
 from ansible_collections.amazon.aws.plugins.module_utils.core import AnsibleAWSModule
+from ansible.module_utils.common.dict_transformations import camel_dict_to_snake_dict
 
 
 DEFAULTS = {
@@ -126,9 +127,9 @@ def get_user_info(conn, module):
         for record in records:
             user_records[record['Username']] = record
         #
-        return user_records
+        return camel_dict_to_snake_dict(user_records, ignore_list=['Tags'])
     else:
-        return records
+        return camel_dict_to_snake_dict(records, ignore_list=['Tags'])
 
 
 def main():

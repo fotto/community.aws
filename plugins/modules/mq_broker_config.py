@@ -64,7 +64,7 @@ EXAMPLES = '''
 
 RETURN = '''
 broker:
-  description: API response of describe_broker() after changes have been applied.
+  description: API response of describe_broker() converted to snake yaml after changes have been applied.
   type: dict
   returned: success
 configuration:
@@ -93,6 +93,7 @@ except ImportError as ex:
     pass
 
 from ansible_collections.amazon.aws.plugins.module_utils.core import AnsibleAWSModule
+from ansible.module_utils.common.dict_transformations import camel_dict_to_snake_dict
 
 
 DEFAULTS = {
@@ -115,7 +116,7 @@ def get_broker_info(conn, module):
     except (botocore.exceptions.ClientError, botocore.exceptions.BotoCoreError) as e:
         if module.check_mode:
             return {
-                'BrokerId': module.params['broker_id'],
+                'broker_id': module.params['broker_id'],
             }
         else:
             module.fail_json_aws(e, msg="Couldn't get broker details.")
@@ -185,7 +186,7 @@ def ensure_config(conn, module):
     if is_same_config(current_cfg_decoded, module.params['config_xml']):
         return {
             'changed': changed,
-            'broker': broker_info
+            'broker': camel_dict_to_snake_dict(broker_info, ignore_list=['Tags'])
         }
     else:
         (c_response, b_response) = (None, None)
@@ -204,7 +205,7 @@ def ensure_config(conn, module):
     broker_info = get_broker_info(conn, module)
     return_struct = {
         'changed': changed,
-        'broker': broker_info,
+        'broker': camel_dict_to_snake_dict(broker_info, ignore_list=['Tags']),
         'configuration': {
             'id': c_response['Id'],
             'revision': c_response['LatestRevision']['Revision']

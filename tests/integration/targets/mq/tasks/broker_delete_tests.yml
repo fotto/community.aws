@@ -17,7 +17,7 @@
   assert:
     fail_msg: broker delete too fast?
     that:
-    - result_d1.broker['BrokerState'] == 'DELETION_IN_PROGRESS'
+    - result_d1.broker['broker_state'] == 'DELETION_IN_PROGRESS'
   when: not ansible_check_mode
 - name: repeat broker deletion
   mq_broker:

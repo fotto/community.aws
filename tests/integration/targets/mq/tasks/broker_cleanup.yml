@@ -10,7 +10,7 @@
     broker_id:      "{{ broker_id }}"
   register: result
   # the condition will never be met - instead it wail fail in the end
-  until: result.broker['BrokerState'] != 'DELETION_IN_PROGRESS'
+  until: result.broker['broker_state'] != 'DELETION_IN_PROGRESS'
   retries: 15
   delay:   60
   ignore_errors: true

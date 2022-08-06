@@ -15,9 +15,9 @@
     fail_msg: test1 failed
     that:
       - result.changed | bool
-      - result.user['Username'] == usernames[0]
-      - not (result.user['Pending']['ConsoleAccess'] | bool)
-      - result.user['Pending']['Groups'] | length == 0
+      - result.user['username'] == usernames[0]
+      - not (result.user['pending']['console_access'] | bool)
+      - result.user['pending']['groups'] | length == 0
   when: not ansible_check_mode
 - name: test2 - create user with console access and group list
   mq_user:
@@ -32,9 +32,9 @@
     fail_msg: test2 failed
     that:
       - result.changed | bool
-      - result.user['Username'] == usernames[1]
-      - result.user['Pending']['ConsoleAccess'] | bool
-      - result.user['Pending']['Groups'] | length == 2
+      - result.user['username'] == usernames[1]
+      - result.user['pending']['console_access'] | bool
+      - result.user['pending']['groups'] | length == 2
   when: not ansible_check_mode
 - name: test3 - create user with defined password
   mq_user:
@@ -47,9 +47,9 @@
     fail_msg: test3 failed
     that:
       - result.changed | bool
-      - result.user['Username'] == usernames[2]
-      - not (result.user['Pending']['ConsoleAccess'] | bool)
-      - result.user['Pending']['Groups'] | length == 0
+      - result.user['username'] == usernames[2]
+      - not (result.user['pending']['console_access'] | bool)
+      - result.user['pending']['groups'] | length == 0
   when: not ansible_check_mode
 - name: test4 - update user password - ignore mode
   mq_user:
@@ -99,8 +99,8 @@
     fail_msg: test7 failed
     that:
       - result.changed | bool
-      - not( result.user['Pending']['ConsoleAccess'] | bool )
-      - result.user['Pending']['Groups'] | length == 2
+      - not( result.user['pending']['console_access'] | bool )
+      - result.user['pending']['groups'] | length == 2
   when: not ansible_check_mode
 - name: test8 - update group list - same list but different order
   mq_user:
@@ -125,7 +125,7 @@
     fail_msg: test9 failed
     that:
       - result.changed | bool
-      - result.user['Pending']['Groups'] | length == 3
+      - result.user['pending']['groups'] | length == 3
   when: not ansible_check_mode
 - name: test10 - update group list - remove element
   mq_user:
@@ -138,7 +138,7 @@
     fail_msg: test10 failed
     that:
       - result.changed | bool
-      - result.user['Pending']['Groups'] | length == 2
+      - result.user['pending']['groups'] | length == 2
   when: not ansible_check_mode
 - name: test11 - update group list - set to empty list
   mq_user:
@@ -151,7 +151,7 @@
     fail_msg: test11 failed
     that:
       - result.changed | bool
-      - result.user['Pending']['Groups'] | length == 0
+      - result.user['pending']['groups'] | length == 0
   when: not ansible_check_mode
 - name: delete all users
   mq_user:

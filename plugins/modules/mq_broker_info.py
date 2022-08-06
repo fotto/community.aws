@@ -43,7 +43,7 @@ EXAMPLES = '''
 
 RETURN = '''
 broker:
-    description: API response of describe_broker().
+    description: API response of describe_broker() converted to snake yaml.
     type: dict
     returned: success
 '''
@@ -55,6 +55,7 @@ except ImportError as ex:
     pass
 
 from ansible_collections.amazon.aws.plugins.module_utils.core import AnsibleAWSModule
+from ansible.module_utils.common.dict_transformations import camel_dict_to_snake_dict
 
 
 def get_broker_id(conn, module):
@@ -77,8 +78,8 @@ def get_broker_info(conn, module, broker_id):
     except (botocore.exceptions.ClientError, botocore.exceptions.BotoCoreError) as e:
         if module.check_mode:
             module.exit_json(broker={
-                'BrokerId': broker_id,
-                'BrokerName': 'fakeName'
+                'broker_id': broker_id,
+                'broker_name': 'fakeName'
             })
         else:
             module.fail_json_aws(e, msg="Couldn't get broker details.")
@@ -104,14 +105,14 @@ def main():
         if not broker_id:
             if module.check_mode:
                 module.exit_json(broker={
-                    'BrokerId': 'fakeId',
-                    'BrokerName': broker_name if broker_name else 'fakeName'
+                    'broker_id': 'fakeId',
+                    'broker_name': broker_name if broker_name else 'fakeName'
                 })
         result = get_broker_info(connection, module, broker_id)
     except botocore.exceptions.ClientError as e:
         module.fail_json_aws(e)
     #
-    module.exit_json(broker=result)
+    module.exit_json(broker=camel_dict_to_snake_dict(result, ignore_list=['Tags']))
 
 
 if __name__ == '__main__':

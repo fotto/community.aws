@@ -6,7 +6,7 @@
   assert:
     fail_msg: "broker with id {{ broker_id }} is not in RUNNING state"
     that:
-      - result.broker['BrokerState'] == 'RUNNING'
+      - result.broker['broker_state'] == 'RUNNING'
   when: not ansible_check_mode
 - name: test 1 - send update to broker config
   mq_broker_config:
@@ -18,9 +18,9 @@
     fail_msg: test1 failed
     that:
       - result.changed | bool
-      - result.broker['BrokerId'] == broker_id
-      - result.configuration['id'] == result.broker['Configurations']['Pending']['Id']
-      - result.configuration['revision'] == result.broker['Configurations']['Pending']['Revision']
+      - result.broker['broker_id'] == broker_id
+      - result.configuration['id'] == result.broker['configurations']['pending']['id']
+      - result.configuration['revision'] == result.broker['configurations']['pending']['revision']
   when: not ansible_check_mode
 - name: test 1a - send same config again
   mq_broker_config:
@@ -56,13 +56,13 @@
     fail_msg: test3 failed
     that:
       - result.changed | bool
-      - result.broker['BrokerState'] == 'REBOOT_IN_PROGRESS'
+      - result.broker['broker_state'] == 'REBOOT_IN_PROGRESS'
   when: not ansible_check_mode
 - name: wait for reboot
   mq_broker_info:
     broker_id:      "{{ broker_id }}"
   register: result
-  until: result.broker['BrokerState'] == 'RUNNING'
+  until: result.broker['broker_state'] == 'RUNNING'
   retries: 15
   delay:   60
   when: not ansible_check_mode

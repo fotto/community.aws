@@ -197,6 +197,7 @@ EXAMPLES = '''
 RETURN = '''
 broker:
   description:
+    - "All API responses are converted to snake yaml except 'Tags'"
     - "'state=present': API response of create_broker() or update_broker() call"
     - "'state=absent': result of describe_broker() call before delete_broker() is triggerd"
     - "'state=restarted': result of describe_broker() after reboot has been triggered"
@@ -210,12 +211,8 @@ except ImportError as ex:
     # handled by AnsibleAWSModule
     pass
 
-try:
-    # when moving to amazon.aws change import to
-    # from ansible.module_utils.core import AnsibleAWSModule
-    from ansible_collections.amazon.aws.plugins.module_utils.core import AnsibleAWSModule
-except ImportError as ex:
-    raise ex
+from ansible_collections.amazon.aws.plugins.module_utils.core import AnsibleAWSModule
+from ansible.module_utils.common.dict_transformations import camel_dict_to_snake_dict
 
 
 PARAMS_MAP = {
@@ -429,7 +426,8 @@ def create_broker(conn, module):
     changed = True
     result = conn.create_broker(**kwargs)
     #
-    return {'broker': result, 'changed': changed}
+    return {'broker': camel_dict_to_snake_dict(result, ignore_list=['Tags']), 
+            'changed': changed}
 
 
 def update_broker(conn, module, broker_id):
@@ -450,8 +448,8 @@ def update_broker(conn, module, broker_id):
     if 'EngineVersion' in kwargs and kwargs['EngineVersion'] == 'latest':
         kwargs['EngineVersion'] = api_result['EngineVersion']
     result = {
-        'BrokerId': broker_id,
-        'BrokerName': broker_name
+        'broker_id': broker_id,
+        'broker_name': broker_name
     }
     changed = False
     if _needs_change(api_result, kwargs):
@@ -465,13 +463,15 @@ def update_broker(conn, module, broker_id):
 
 def ensure_absent(conn, module):
     result = {
-        'BrokerName': module.params['broker_name'],
-        'BrokerId': None
+        'broker_name': module.params['broker_name'],
+        'broker_id': None
     }
     if module.check_mode:
-        return {'broker': result, 'changed': True}
+        return {
+            'broker': camel_dict_to_snake_dict(result, ignore_list=['Tags']),
+            'changed': True}
     broker_id = get_broker_id(conn, module)
-    result['BrokerId'] = broker_id
+    result['broker_id'] = broker_id
     if broker_id:
         try:
             # check for pending delete (small race condition possible here
@@ -491,8 +491,8 @@ def ensure_absent(conn, module):
 def ensure_present(conn, module):
     if module.check_mode:
         return {'broker': {
-            'BrokerArn': 'fakeArn',
-            'BrokerId': 'fakeId'
+            'broker_arn': 'fakeArn',
+            'broker_id': 'fakeId'
         }, 'changed': True}
     #
     broker_id = get_broker_id(conn, module)
@@ -549,7 +549,7 @@ def main():
         broker_id = get_broker_id(connection, module)
         if module.check_mode:
             module.exit_json(broker={
-                'BrokerId': broker_id if broker_id else 'fakeId'
+                'broker_id': broker_id if broker_id else 'fakeId'
             }, changed=True)
         if not broker_id:
             module.fail_json_aws(RuntimeError,
