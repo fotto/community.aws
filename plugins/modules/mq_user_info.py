@@ -9,21 +9,6 @@ __metaclass__ = type
 DOCUMENTATION = '''
 ---
 module: mq_user_info
-<<<<<<< HEAD
-version_added: 0.9.0
-short_description: List users of an Amazon MQ broker
-description:
-  - list users for the specified broker id
-  - Pending creations and deletions can be skipped by options
-author: FCO (@fotto)
-requirements:
-  - boto3
-  - botocore
-options:
-  broker_id:
-    description:
-      - "The ID of the MQ broker to work on"
-=======
 version_added: 4.1.0
 short_description: List users of an Amazon MQ broker
 description:
@@ -35,54 +20,32 @@ options:
   broker_id:
     description:
       - The ID of the MQ broker to work on.
->>>>>>> 4b5a4eb47689b7250c566e93ef5dcdadc1a89c98
     type: str
     required: true
   max_results:
     description:
-<<<<<<< HEAD
-      - "The maximum number of results to return"
-=======
       - The maximum number of results to return.
->>>>>>> 4b5a4eb47689b7250c566e93ef5dcdadc1a89c98
     type: int
     default: 100
   skip_pending_create:
     description:
-<<<<<<< HEAD
-      - "Will skip pending creates from the result set"
-=======
       - Will skip pending creates from the result set.
->>>>>>> 4b5a4eb47689b7250c566e93ef5dcdadc1a89c98
     type: bool
     default: false
   skip_pending_delete:
     description:
-<<<<<<< HEAD
-      - "Will skip pending deletes from the result set"
-=======
       - Will skip pending deletes from the result set.
->>>>>>> 4b5a4eb47689b7250c566e93ef5dcdadc1a89c98
     type: bool
     default: false
   as_dict:
     description:
-<<<<<<< HEAD
-      - "convert result into lookup table by username"
-=======
       - Convert result into lookup table by username.
->>>>>>> 4b5a4eb47689b7250c566e93ef5dcdadc1a89c98
     type: bool
     default: false
 
 extends_documentation_fragment:
-<<<<<<< HEAD
-- amazon.aws.aws
-- amazon.aws.ec2
-=======
   - amazon.aws.aws
   - amazon.aws.ec2
->>>>>>> 4b5a4eb47689b7250c566e93ef5dcdadc1a89c98
 '''
 
 
@@ -91,38 +54,19 @@ EXAMPLES = '''
   amazon.aws.mq_user_info:
     broker_id: "aws-mq-broker-id"
     max_results: 50
-<<<<<<< HEAD
-    region: "{{ aws_region }}"
-=======
->>>>>>> 4b5a4eb47689b7250c566e93ef5dcdadc1a89c98
   register: result
 - name: get users as dict - explicitly specifying all credentials
   amazon.aws.mq_user_info:
     broker_id: "aws-mq-broker-id"
-<<<<<<< HEAD
-    region: "{{ aws_region }}"
-    aws_access_key: "{{ aws_access_key_id }}"
-    aws_secret_key: "{{ aws_secret_access_key }}"
-    security_token: "{{ aws_session_token }}"
-=======
->>>>>>> 4b5a4eb47689b7250c566e93ef5dcdadc1a89c98
   register: result
 - name: get list of users to decide which may need to be deleted
   amazon.aws.mq_user_info:
     broker_id: "aws-mq-broker-id"
     skip_pending_delete: true
-<<<<<<< HEAD
-    region: "{{ aws_region }}"
-=======
->>>>>>> 4b5a4eb47689b7250c566e93ef5dcdadc1a89c98
 - name: get list of users to decide which may need to be created
   amazon.aws.mq_user_info:
     broker_id: "aws-mq-broker-id"
     skip_pending_create: true
-<<<<<<< HEAD
-    region: "{{ aws_region }}"
-=======
->>>>>>> 4b5a4eb47689b7250c566e93ef5dcdadc1a89c98
 '''
 
 RETURN = '''
@@ -130,13 +74,6 @@ users:
     type: dict
     returned: success
     description:
-<<<<<<< HEAD
-    - dict key is username
-    - each entry is the record for a user as returned by API
-=======
-      - dict key is username
-      - each entry is the record for a user as returned by API
->>>>>>> 4b5a4eb47689b7250c566e93ef5dcdadc1a89c98
 '''
 
 try:
@@ -145,16 +82,7 @@ except ImportError as ex:
     # handled by AnsibleAWSModule
     pass
 
-<<<<<<< HEAD
-try:
-    # use different package reference to make it work in community.aws. original line
-    # from ansible.module_utils.core import AnsibleAWSModule
-    from ansible_collections.amazon.aws.plugins.module_utils.core import AnsibleAWSModule
-except ImportError as ex:
-    raise ex
-=======
 from ansible_collections.amazon.aws.plugins.module_utils.core import AnsibleAWSModule
->>>>>>> 4b5a4eb47689b7250c566e93ef5dcdadc1a89c98
 
 
 DEFAULTS = {

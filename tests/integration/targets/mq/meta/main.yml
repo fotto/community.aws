@@ -1,7 +1,1 @@
-<<<<<<< HEAD
-dependencies:
-  - prepare_tests
-  - setup_ec2
-=======
 dependencies: []
->>>>>>> 4b5a4eb47689b7250c566e93ef5dcdadc1a89c98

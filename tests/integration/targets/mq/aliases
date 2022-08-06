@@ -4,13 +4,8 @@
 # tests run about 30 minutes
 unsupported
 
-<<<<<<< HEAD
-
-cloud/aws
-=======
 cloud/aws
 
->>>>>>> 4b5a4eb47689b7250c566e93ef5dcdadc1a89c98
 mq_broker_info
 mq_broker
 mq_broker_config
