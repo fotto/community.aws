@@ -9,23 +9,6 @@ __metaclass__ = type
 DOCUMENTATION = '''
 ---
 module: mq_user
-<<<<<<< HEAD
-version_added: 0.9.0
-short_description: Manage users in existing Amazon MQ broker
-description:
-- Manage Amazon MQ users.
-- "pending changes are taking into account, i.e. "
-- "if you update a user without rebooting the broker then running "
-- "that operation a 2nd type (without reboot) will yield 'changed=false'."
-- "see 'options' seconds to learn about password handling"
-author:
-- FCO (@fotto)
-requirements: [ boto3 ]
-options:
-  broker_id:
-    description:
-      - "The ID of the MQ broker to work on"
-=======
 version_added: 4.1.0
 short_description: Manage users in existing Amazon MQ broker
 description:
@@ -37,41 +20,21 @@ options:
   broker_id:
     description:
       - The ID of the MQ broker to work on.
->>>>>>> 4b5a4eb47689b7250c566e93ef5dcdadc1a89c98
     type: str
     required: true
   username:
     description:
-<<<<<<< HEAD
-      - "The name of the user to create/update/delete"
-=======
       - The name of the user to create/update/delete.
->>>>>>> 4b5a4eb47689b7250c566e93ef5dcdadc1a89c98
     type: str
     required: true
   state:
     description:
-<<<<<<< HEAD
-      - "Create/Update vs Delete of user."
-=======
       - Create/Update vs Delete of user.
->>>>>>> 4b5a4eb47689b7250c566e93ef5dcdadc1a89c98
     default: present
     choices: [ 'present', 'absent' ]
     type: str
   console_access:
     description:
-<<<<<<< HEAD
-      - "True: user can use MQ Console."
-      - "Will not be changed on update unless explicitly defined"
-      - "default on create: false"
-    type: bool
-  groups:
-    description:
-      - "Set group memberships for user"
-      - "Will not be changed on update unless explicitly defined"
-      - "default on create: empty list"
-=======
       - Whether the user can access the MQ Console.
       - Defaults to C(false) on creation.
     type: bool
@@ -79,29 +42,10 @@ options:
     description:
       - Set group memberships for user.
       - Defaults to C([]) on creation.
->>>>>>> 4b5a4eb47689b7250c566e93ef5dcdadc1a89c98
     type: list
     elements: str
   password:
     description:
-<<<<<<< HEAD
-      - "Set password for user"
-      - "on create: if not defined a random password will be set"
-      - "on update: will be ignored unless 'allow_pw_update' is set to true"
-    type: str
-  allow_pw_update:
-    description:
-      - "Only used of 'password' parameter set for existing user"
-    default: false
-    type: bool
-  region:
-    description:
-    - set AWS region for API operations
-    type: str
-extends_documentation_fragment:
-- amazon.aws.aws
-- amazon.aws.ec2
-=======
       - Set password for user.
       - Defaults to a random password on creation.
       - Ignored unless I(allow_pw_update=true).
@@ -115,7 +59,6 @@ extends_documentation_fragment:
 extends_documentation_fragment:
   - amazon.aws.aws
   - amazon.aws.ec2
->>>>>>> 4b5a4eb47689b7250c566e93ef5dcdadc1a89c98
 '''
 
 EXAMPLES = '''
@@ -123,10 +66,6 @@ EXAMPLES = '''
   amazon.aws.mq_user:
     state: present
     broker_id: "aws-mq-broker-id"
-<<<<<<< HEAD
-    region: "{{ aws_region }}"
-=======
->>>>>>> 4b5a4eb47689b7250c566e93ef5dcdadc1a89c98
     username: "sample_user1"
     console_access: false
     groups: [ "g1", "g2" ]
@@ -143,48 +82,19 @@ EXAMPLES = '''
     state: absent
     broker_id: "aws-mq-broker-id"
     username: "other_user"
-<<<<<<< HEAD
-    region: "{{ aws_region }}"
-    aws_access_key: "{{ aws_access_key_id }}"
-    aws_secret_key: "{{ aws_secret_access_key }}"
-    security_token: "{{ aws_session_token }}"
-=======
->>>>>>> 4b5a4eb47689b7250c566e93ef5dcdadc1a89c98
 '''
 
 RETURN = '''
 user:
     description:
-<<<<<<< HEAD
-    - just echos the username
-    - "only present when state=present"
-=======
       - just echos the username
       - "only present when state=present"
->>>>>>> 4b5a4eb47689b7250c566e93ef5dcdadc1a89c98
     type: str
     returned: success
 '''
 
-<<<<<<< HEAD
-import sys
-IS_PYTHON36 = True
-if sys.hexversion < 34013184:
-    # python2.6 hack
-    IS_PYTHON36 = False
-else:
-    if sys.version_info.major < 3 or sys.version_info.minor < 6:
-        IS_PYTHON36 = False
-
-if IS_PYTHON36:
-    import secrets
-else:
-    import random
-    import hashlib
-=======
 import secrets
 import sys
->>>>>>> 4b5a4eb47689b7250c566e93ef5dcdadc1a89c98
 
 try:
     import botocore
@@ -192,16 +102,7 @@ except ImportError as ex:
     # handled by AnsibleAWSModule
     pass
 
-<<<<<<< HEAD
-try:
-    # use different package reference to make it work in community.aws. original line
-    # from ansible.module_utils.core import AnsibleAWSModule
-    from ansible_collections.amazon.aws.plugins.module_utils.core import AnsibleAWSModule
-except ImportError as ex:
-    raise ex
-=======
 from ansible_collections.amazon.aws.plugins.module_utils.core import AnsibleAWSModule
->>>>>>> 4b5a4eb47689b7250c566e93ef5dcdadc1a89c98
 
 CREATE_DEFAULTS = {
     'console_access': False,
@@ -237,20 +138,7 @@ def _console_access_change_required(user_response, requested_boolean):
 
 
 def generate_password():
-<<<<<<< HEAD
-    if IS_PYTHON36:
-        return secrets.token_hex(20)
-    # python2.7:
-    in_str = ''
-    for i in range(0, 19):
-        in_str += str(random.randint(10000, 99999))
-    #
-    h = hashlib.md5()
-    h.update(in_str)
-    return h.hexdigest()
-=======
     return secrets.token_hex(20)
->>>>>>> 4b5a4eb47689b7250c566e93ef5dcdadc1a89c98
 
 
 # returns API response object
