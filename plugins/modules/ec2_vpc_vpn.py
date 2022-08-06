@@ -10,14 +10,16 @@ DOCUMENTATION = r'''
 ---
 module: ec2_vpc_vpn
 version_added: 1.0.0
-short_description: Create, modify, and delete EC2 VPN connections.
+short_description: Create, modify, and delete EC2 VPN connections
 description:
   - This module creates, modifies, and deletes VPN connections. Idempotence is achieved by using the filters
     option or specifying the VPN connection identifier.
 extends_documentation_fragment:
-- amazon.aws.ec2
-- amazon.aws.aws
-author: "Sloane Hertel (@s-hertel)"
+  - amazon.aws.ec2
+  - amazon.aws.aws
+  - amazon.aws.tags.deprecated_purge
+author:
+  - "Sloane Hertel (@s-hertel)"
 options:
   state:
     description:
@@ -44,15 +46,6 @@ options:
     description:
       - The ID of the VPN connection. Required to modify or delete a connection if the filters option does not provide a unique match.
     type: str
-  tags:
-    description:
-      - Tags to attach to the VPN connection.
-    type: dict
-  purge_tags:
-    description:
-      - Whether or not to delete VPN connections tags that are associated with the connection but not specified in the task.
-    type: bool
-    default: false
   static_only:
     description:
       - Indicates whether the VPN connection uses static routes only. Static routes must be used for devices that don't support BGP.
@@ -580,8 +573,12 @@ def check_for_update(connection, module_params, vpn_connection_id):
 
     # Get changes to tags
     current_tags = boto3_tag_list_to_ansible_dict(current_attrs.get('tags', []), u'key', u'value')
-    tags_to_add, changes['tags_to_remove'] = compare_aws_tags(current_tags, tags, purge_tags)
-    changes['tags_to_add'] = ansible_dict_to_boto3_tag_list(tags_to_add)
+    if tags is None:
+        changes['tags_to_remove'] = []
+        changes['tags_to_add'] = []
+    else:
+        tags_to_add, changes['tags_to_remove'] = compare_aws_tags(current_tags, tags, purge_tags)
+        changes['tags_to_add'] = ansible_dict_to_boto3_tag_list(tags_to_add)
     # Get changes to routes
     if 'Routes' in vpn_connection:
         current_routes = [route['DestinationCidrBlock'] for route in vpn_connection['Routes']]
@@ -655,18 +652,16 @@ def get_check_mode_results(connection, module_params, vpn_connection_id=None, cu
 
     # get combined current tags and tags to set
     present_tags = module_params.get('tags')
-    if current_state and 'Tags' in current_state:
+    if present_tags is None:
+        pass
+    elif current_state and 'Tags' in current_state:
         current_tags = boto3_tag_list_to_ansible_dict(current_state['Tags'])
+        tags_to_add, tags_to_remove = compare_aws_tags(current_tags, present_tags, module_params.get('purge_tags'))
+        changed |= bool(tags_to_remove) or bool(tags_to_add)
         if module_params.get('purge_tags'):
-            if current_tags != present_tags:
-                changed = True
-        elif current_tags != present_tags:
-            if not set(present_tags.keys()) < set(current_tags.keys()):
-                changed = True
-            # add preexisting tags that new tags didn't overwrite
-            present_tags.update((tag, current_tags[tag]) for tag in current_tags if tag not in present_tags)
-        elif current_tags.keys() == present_tags.keys() and set(present_tags.values()) != set(current_tags.values()):
-            changed = True
+            current_tags = {}
+        current_tags.update(present_tags)
+        results['tags'] = current_tags
     elif module_params.get('tags'):
         changed = True
     if present_tags:
@@ -766,13 +761,13 @@ def main():
         state=dict(type='str', default='present', choices=['present', 'absent']),
         filters=dict(type='dict', default={}),
         vpn_gateway_id=dict(type='str'),
-        tags=dict(default={}, type='dict'),
+        tags=dict(type='dict', aliases=['resource_tags']),
         connection_type=dict(default='ipsec.1', type='str'),
         tunnel_options=dict(no_log=True, type='list', default=[], elements='dict'),
         static_only=dict(default=False, type='bool'),
         customer_gateway_id=dict(type='str'),
         vpn_connection_id=dict(type='str'),
-        purge_tags=dict(type='bool', default=False),
+        purge_tags=dict(type='bool'),
         routes=dict(type='list', default=[], elements='str'),
         purge_routes=dict(type='bool', default=False),
         wait_timeout=dict(type='int', default=600),
@@ -781,6 +776,14 @@ def main():
     module = AnsibleAWSModule(argument_spec=argument_spec,
                               supports_check_mode=True)
     connection = module.client('ec2', retry_decorator=VPNRetry.jittered_backoff(retries=10))
+
+    if module.params.get('purge_tags') is None:
+        module.deprecate(
+            'The purge_tags parameter currently defaults to False.'
+            ' For consistency across the collection, this default value'
+            ' will change to True in release 5.0.0.',
+            version='5.0.0', collection_name='community.aws')
+        module.params['purge_tags'] = False
 
     state = module.params.get('state')
     parameters = dict(module.params)

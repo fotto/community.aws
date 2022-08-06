@@ -8,7 +8,7 @@ __metaclass__ = type
 
 DOCUMENTATION = r'''
 module: rds_option_group
-short_description: rds_option_group module
+short_description: Manages the creation, modification, deletion of RDS option groups
 version_added: 2.1.0
 description:
   - Manages the creation, modification, deletion of RDS option groups.
@@ -70,6 +70,7 @@ options:
             description: The option settings to include in an option group.
             required: false
             type: list
+            elements: dict
             suboptions:
                 name:
                     description: The name of the option that has settings that you can set.
@@ -111,27 +112,20 @@ options:
             description: A list of C(DBSecurityGroupMembership) name strings used for this option.
             required: false
             type: list
+            elements: str
         vpc_security_group_memberships:
             description: A list of C(VpcSecurityGroupMembership) name strings used for this option.
             required: false
             type: list
-  tags:
-    description:
-      - A dictionary of key value pairs to assign the option group.
-      - To remove all tags set I(tags={}) and I(purge_tags=true).
-    type: dict
-  purge_tags:
-    description:
-      - Remove tags not listed in I(tags).
-    type: bool
-    default: true
+            elements: str
   wait:
     description: Whether to wait for the cluster to be available or deleted.
     type: bool
     default: True
 extends_documentation_fragment:
-- amazon.aws.aws
-- amazon.aws.ec2
+  - amazon.aws.aws
+  - amazon.aws.ec2
+  - amazon.aws.tags
 '''
 
 EXAMPLES = r'''
@@ -641,7 +635,7 @@ def main():
         options=dict(required=False, type='list', elements='dict'),
         apply_immediately=dict(type='bool', default=False),
         state=dict(required=True, choices=['present', 'absent']),
-        tags=dict(required=False, type='dict'),
+        tags=dict(required=False, type='dict', aliases=['resource_tags']),
         purge_tags=dict(type='bool', default=True),
         wait=dict(type='bool', default=True),
     )

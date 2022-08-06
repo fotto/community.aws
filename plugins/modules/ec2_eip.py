@@ -14,8 +14,8 @@ module: ec2_eip
 version_added: 1.0.0
 short_description: manages EC2 elastic IP (EIP) addresses.
 description:
-    - This module can allocate or release an EIP.
-    - This module can associate/disassociate an EIP with instances or network interfaces.
+  - This module can allocate or release an EIP.
+  - This module can associate/disassociate an EIP with instances or network interfaces.
 options:
   device_id:
     description:
@@ -27,8 +27,8 @@ options:
   public_ip:
     description:
       - The IP address of a previously allocated EIP.
-      - When I(public_ip=present) and device is specified, the EIP is associated with the device.
-      - When I(public_ip=absent) and device is specified, the EIP is disassociated from the device.
+      - When I(state=present) and device is specified, the EIP is associated with the device.
+      - When I(state=absent) and device is specified, the EIP is disassociated from the device.
     aliases: [ ip ]
     type: str
   state:
@@ -64,16 +64,6 @@ options:
          network interface or instance to be re-associated with the specified instance or interface.
     default: false
     type: bool
-  tags:
-    description: A dictionary of tags to apply to the EIP.
-    type: dict
-    version_added: 2.1.0
-  purge_tags:
-    description: Whether the I(tags) argument should cause tags not in the
-      dictionary to be removed.
-    default: True
-    type: bool
-    version_added: 2.1.0
   tag_name:
     description:
       - When I(reuse_existing_ip_allowed=true), supplement with this option to only reuse
@@ -88,23 +78,22 @@ options:
       - Allocates the new Elastic IP from the provided public IPv4 pool (BYOIP)
         only applies to newly allocated Elastic IPs, isn't validated when I(reuse_existing_ip_allowed=true).
     type: str
-  wait_timeout:
-    description:
-      - The I(wait_timeout) option does nothing and will be removed after 2022-06-01
-    type: int
 extends_documentation_fragment:
-- amazon.aws.aws
-- amazon.aws.ec2
+  - amazon.aws.aws
+  - amazon.aws.ec2
+  - amazon.aws.tags
 
-author: "Rick Mendes (@rickmendes) <rmendes@illumina.com>"
+author:
+  - "Rick Mendes (@rickmendes) <rmendes@illumina.com>"
 notes:
-   - There may be a delay between the time the EIP is assigned and when
-     the cloud instance is reachable via the new address. Use wait_for and
-     pause to delay further playbook execution until the instance is reachable,
-     if necessary.
-   - This module returns multiple changed statuses on disassociation or release.
-     It returns an overall status based on any changes occurring. It also returns
-     individual changed statuses for disassociation and release.
+  - There may be a delay between the time the EIP is assigned and when
+    the cloud instance is reachable via the new address. Use wait_for and
+    pause to delay further playbook execution until the instance is reachable,
+    if necessary.
+  - This module returns multiple changed statuses on disassociation or release.
+    It returns an overall status based on any changes occurring. It also returns
+    individual changed statuses for disassociation and release.
+  - Support for I(tags) and I(purge_tags) was added in release 2.1.0.
 '''
 
 EXAMPLES = '''
@@ -328,7 +317,7 @@ def find_address(ec2, module, public_ip, device_id, is_instance=True):
     except is_boto3_error_code('InvalidAddress.NotFound') as e:
         # If we're releasing and we can't find it, it's already gone...
         if module.params.get('state') == 'absent':
-            module.exit_json(changed=False)
+            module.exit_json(changed=False, disassociated=False, released=False)
         module.fail_json_aws(e, msg="Couldn't obtain list of existing Elastic IP addresses")
 
     addresses = addresses["Addresses"]
@@ -385,6 +374,8 @@ def allocate_address(ec2, module, domain, reuse_existing_ip_allowed, check_mode,
         return allocate_address_from_pool(ec2, module, domain, check_mode, public_ipv4_pool), True
 
     try:
+        if check_mode:
+            return None, True
         result = ec2.allocate_address(Domain=domain, aws_retry=True), True
     except (botocore.exceptions.BotoCoreError, botocore.exceptions.ClientError) as e:
         module.fail_json_aws(e, msg="Couldn't allocate Elastic IP address")
@@ -493,8 +484,11 @@ def ensure_absent(ec2, module, address, device_id, check_mode, is_instance=True)
 
 
 def allocate_address_from_pool(ec2, module, domain, check_mode, public_ipv4_pool):
-    # type: (EC2Connection, str, bool, str) -> Address
-    """ Overrides boto's allocate_address function to support BYOIP """
+    # type: (EC2Connection, AnsibleAWSModule, str, bool, str) -> Address
+    """ Overrides botocore's allocate_address function to support BYOIP """
+    if check_mode:
+        return None
+
     params = {}
 
     if domain is not None:
@@ -502,9 +496,6 @@ def allocate_address_from_pool(ec2, module, domain, check_mode, public_ipv4_pool
 
     if public_ipv4_pool is not None:
         params['PublicIpv4Pool'] = public_ipv4_pool
-
-    if check_mode:
-        params['DryRun'] = 'true'
 
     try:
         result = ec2.allocate_address(aws_retry=True, **params)
@@ -544,9 +535,8 @@ def main():
                                        default=False),
         release_on_disassociation=dict(required=False, type='bool', default=False),
         allow_reassociation=dict(type='bool', default=False),
-        wait_timeout=dict(type='int', removed_at_date='2022-06-01', removed_from_collection='community.aws'),
         private_ip_address=dict(),
-        tags=dict(required=False, type='dict'),
+        tags=dict(required=False, type='dict', aliases=['resource_tags']),
         purge_tags=dict(required=False, type='bool', default=True),
         tag_name=dict(),
         tag_value=dict(),
@@ -606,19 +596,33 @@ def main():
                     reuse_existing_ip_allowed, allow_reassociation,
                     module.check_mode, is_instance=is_instance
                 )
+                if 'allocation_id' not in result:
+                    # Don't check tags on check_mode here - no EIP to pass through
+                    module.exit_json(**result)
             else:
                 if address:
-                    changed = False
+                    result = {
+                        'changed': False,
+                        'public_ip': address['PublicIp'],
+                        'allocation_id': address['AllocationId']
+                    }
                 else:
                     address, changed = allocate_address(
                         ec2, module, domain, reuse_existing_ip_allowed,
                         module.check_mode, tag_dict, public_ipv4_pool
                     )
-                result = {
-                    'changed': changed,
-                    'public_ip': address['PublicIp'],
-                    'allocation_id': address['AllocationId']
-                }
+                    if address:
+                        result = {
+                            'changed': changed,
+                            'public_ip': address['PublicIp'],
+                            'allocation_id': address['AllocationId']
+                        }
+                    else:
+                        # Don't check tags on check_mode here - no EIP to pass through
+                        result = {
+                            'changed': changed
+                        }
+                        module.exit_json(**result)
 
             result['changed'] |= ensure_ec2_tags(
                 ec2, module, result['allocation_id'],
@@ -633,21 +637,21 @@ def main():
                     released = release_address(ec2, module, address, module.check_mode)
                     result = {
                         'changed': True,
-                        'disassociated': disassociated,
-                        'released': released
+                        'disassociated': disassociated['changed'],
+                        'released': released['changed']
                     }
                 else:
                     result = {
                         'changed': disassociated['changed'],
-                        'disassociated': disassociated,
-                        'released': {'changed': False}
+                        'disassociated': disassociated['changed'],
+                        'released': False
                     }
             else:
                 released = release_address(ec2, module, address, module.check_mode)
                 result = {
                     'changed': released['changed'],
-                    'disassociated': {'changed': False},
-                    'released': released
+                    'disassociated': False,
+                    'released': released['changed']
                 }
 
     except (botocore.exceptions.BotoCoreError, botocore.exceptions.ClientError) as e:

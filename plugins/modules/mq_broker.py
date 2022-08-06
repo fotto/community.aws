@@ -9,134 +9,127 @@ __metaclass__ = type
 DOCUMENTATION = '''
 ---
 module: mq_broker
-version_added: 0.9.0
+version_added: 4.1.0
 short_description: MQ broker management
 description:
-  - create/update/delete a broker.
-  - reboot a broker
-author: FCO (@fotto)
-requirements:
-  - boto3
-  - botocore
+  - Create/update/delete a broker.
+  - Reboot a broker.
+author:
+  - FCO (@fotto)
 options:
   broker_name:
     description:
-    - "The Name of the MQ broker to work on"
+      - The Name of the MQ broker to work on.
     type: str
     required: true
   state:
-    description:
-    - "'present': create/update broker"
-    - "'absent': delete broker"
-    - "'restarted': reboot broker"
+    description: 
+      - "C(present): Create/update broker."
+      - "C(absent): Delete broker."
+      - "C(restarted): Reboot broker."
     choices: [ 'present', 'absent', 'restarted' ]
     default: present
     type: str
   deployment_mode:
     description:
-    - set broker deployment type
-    - can be used only during creation
-    - "default: 'SINGLE_INSTANCE'"
+      - Set broker deployment type.
+      - Can be used only during creation.
+      - Defaults to C(SINGLE_INSTANCE).
     choices: [ 'SINGLE_INSTANCE', 'ACTIVE_STANDBY_MULTI_AZ', 'CLUSTER_MULTI_AZ' ]
     type: str
   use_aws_owned_key:
     description:
-    - must be set to false if 'kms_key_id' is provided as well
-    - can be used only during creation
-    - "default: true"
+      - Must be set to C(false) if I(kms_key_id) is provided as well.
+      - Can be used only during creation.
+      - Defaults to C(true)
     type: bool
   kms_key_id:
     description:
-    - use referenced key to encrypt broker data at rest
-    - can be used only during creation
+      - Use referenced key to encrypt broker data at rest.
+      - Can be used only during creation.
     type: str
   engine_type:
     description:
-    - set broker engine type
-    - can be used only during creation
-    - "default: 'ACTIVEMQ'"
+      - Set broker engine type.
+      - Can be used only during creation.
+      - Defaults to C(ACTIVEMQ)
     choices: [ 'ACTIVEMQ', 'RABBITMQ' ]
     type: str
   maintenance_window_start_time:
     description:
-    - set maintenance window for automatic minor upgrades
-    - can be used only during creation
-    - not providing any value means "no maintenance window"
+      - Set maintenance window for automatic minor upgrades.
+      - Can be used only during creation.
+      - Not providing any value means "no maintenance window".
     type: dict
   publicly_accessible:
     description:
-    - allow/disallow public access
-    - can be used only during creation
-    - "default: false"
+      - Allow/disallow public access.
+      - Can be used only during creation.
+      - Defaults to C(false).
     type: bool
   storage_type:
     description:
-    - set underlying storage type
-    - can be used only during creation
-    - "default: 'EFS'"
+      - Set underlying storage type.
+      - Can be used only during creation.
+      - Defaults to C(EFS).
     choices: [ 'EBS', 'EFS' ]
     type: str
   subnet_ids:
     description:
-    - defines where deploy broker instances to
-    - minimum required number depends on deployment type
-    - can be used only during creation
+      - Defines where deploy broker instances to.
+      - Minimum required number depends on deployment type.
+      - Can be used only during creation.
     type: list
     elements: str
   users:
     description:
-    - "module 'mq_user' is the preferred way to manage (local) users"
-    - "however a broker cannot be created without any user"
-    - "if nothing is specified a default 'admin' user will be created along with brokers"
-    - "this parameter allows to use a custom set of initial user(s)"
-    - "can be used only during creation: use mq_user module for updates"
+      - This parameter allows to use a custom set of initial user(s).
+      - M(community.aws.mq_user) is the preferred way to manage (local) users
+        however a broker cannot be created without any user.
+      - If nothing is specified a default C(admin) user will be created along with brokers.
+      - Can be used only during creation.  Use M(community.aws.mq_user) module for updates.
     type: list
     elements: dict
   tags:
     description:
-    - tag newly created brokers
-    - can be used only during creation
+      - Tag newly created brokers.
+      - Can be used only during creation.
     type: dict
   authentication_strategy:
-    description: choose between locally and remotely managed users
+    description: Choose between locally and remotely managed users.
     choices: [ 'SIMPLE', 'LDAP' ]
     type: str
   auto_minor_version_upgrade:
-    description: allow/disallow automatic minor version upgrades
+    description: Allow/disallow automatic minor version upgrades.
     type: bool
     default: true
   engine_version:
     description:
-    - set engine version of broker
-    - the special value 'latest' will pick the latest available version
-    - the special value 'latest' is ignored on update
+      - Set engine version of broker.
+      - The special value C(latest) will pick the latest available version.
+      - The special value C(latest) is ignored on update.
     type: str
   host_instance_type:
-    description: instance type of broker instances
+    description: Instance type of broker instances.
     type: str
   enable_audit_log:
-    description: enable/disable to push audit logs to AWS CloudWatch
+    description: Enable/disable to push audit logs to AWS CloudWatch.
     type: bool
     default: false
   enable_general_log:
-    description: enable/disable to push general logs to AWS CloudWatch
+    description: Enable/disable to push general logs to AWS CloudWatch.
     type: bool
     default: false
   security_groups:
     description:
-    - associate security groups with broker
-    - at least one must be provided during creation
+      - Associate security groups with broker.
+      - At least one must be provided during creation.
     type: list
     elements: str
-  region:
-    description:
-    - set AWS region for API operations
-    type: str
 
 extends_documentation_fragment:
-- amazon.aws.aws
-- amazon.aws.ec2
-
+  - amazon.aws.aws
+  - amazon.aws.ec2
 '''
 
 
@@ -144,19 +137,17 @@ EXAMPLES = '''
 - name: create broker (if missing) with minimal required parameters
   amazon.aws.mq_broker:
     broker_name: "{{ broker_name }}"
-    region: "{{ aws_region }}"
     security_groups:
-    - sg_xxxxxxx
+      - sg_xxxxxxx
     subnet_ids:
-    - subnet_xxx
-    - subnet_yyy
+      - subnet_xxx
+      - subnet_yyy
     register: result
 - set_fact:
     broker_id: "{{ result.broker['BrokerId'] }}"
 - name: use mq_broker_info to wait until broker is ready
   amazon.aws.mq_broker_info:
     broker_id: "{{ broker_id }}"
-    region: "{{ aws_region }}"
   register: result
   until: "result.broker['BrokerState'] == 'RUNNING'"
   retries: 15
@@ -176,14 +167,10 @@ EXAMPLES = '''
     publicly_accessible: true
     storage_type: 'EFS'
     security_groups:
-    - sg_xxxxxxx
+      - sg_xxxxxxx
     subnet_ids:
-    - subnet_xxx
-    - subnet_yyy
-    region: "{{ aws_region }}"
-    aws_access_key: "{{ aws_access_key_id }}"
-    aws_secret_key: "{{ aws_secret_access_key }}"
-    security_token: "{{ aws_session_token }}"
+      - subnet_xxx
+      - subnet_yyy
     users:
     - Username: 'initial-user'
       Password': 'plain-text-password'
@@ -201,22 +188,20 @@ EXAMPLES = '''
   amazon.aws.mq_broker:
     broker_name: "my_broker_2"
     state: restarted
-    region: "{{ aws_region }}"
 - name: delete a broker
   amazon.aws.mq_broker:
     broker_name: "my_broker_2"
     state: absent
-    region: "{{ aws_region }}"
 '''
 
 RETURN = '''
 broker:
-    description:
+  description:
     - "'state=present': API response of create_broker() or update_broker() call"
     - "'state=absent': result of describe_broker() call before delete_broker() is triggerd"
     - "'state=restarted': result of describe_broker() after reboot has been triggered"
-    type: dict
-    returned: success
+  type: dict
+  returned: success
 '''
 
 try:

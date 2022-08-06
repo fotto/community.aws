@@ -12,19 +12,19 @@ DOCUMENTATION = r'''
 version_added: 1.0.0
 module: cloudfront_distribution
 
-short_description: Create, update and delete AWS CloudFront distributions.
+short_description: Create, update and delete AWS CloudFront distributions
 
 description:
-    - Allows for easy creation, updating and deletion of CloudFront distributions.
+  - Allows for easy creation, updating and deletion of CloudFront distributions.
 
 author:
   - Willem van Ketwich (@wilvk)
   - Will Thames (@willthames)
 
 extends_documentation_fragment:
-- amazon.aws.aws
-- amazon.aws.ec2
-
+  - amazon.aws.aws
+  - amazon.aws.ec2
+  - amazon.aws.tags.deprecated_purge
 
 options:
 
@@ -57,21 +57,6 @@ options:
           to reference an existing distribution. If not specified, this defaults to a datetime stamp of the format
           C(YYYY-MM-DDTHH:MM:SS.ffffff).
       type: str
-
-    tags:
-      description:
-        - Should be input as a dict of key-value pairs.
-        - "Note that numeric keys or values must be wrapped in quotes. e.g. C(Priority: '1')"
-      type: dict
-
-    purge_tags:
-      description:
-        - Specifies whether existing tags will be removed before adding new tags.
-        - When I(purge_tags=yes), existing tags are removed and I(tags) are added, if specified.
-          If no tags are specified, it removes all existing tags for the distribution.
-        - When I(purge_tags=no), existing tags are kept and I(tags) are added, if specified.
-      default: false
-      type: bool
 
     alias:
       description:
@@ -200,6 +185,10 @@ options:
             - The ID of the origin that you want CloudFront to route requests to
               by default.
           type: str
+        response_headers_policy_id:
+          description:
+            - The ID of the header policy that CloudFront adds to responses that it sends to viewers.
+          type: str
         forwarded_values:
           description:
             - A dict that specifies how CloudFront handles query strings and cookies.
@@ -316,6 +305,10 @@ options:
           description:
             - The ID of the origin that you want CloudFront to route requests to
               by default.
+          type: str
+        response_headers_policy_id:
+          description:
+            - The ID of the header policy that CloudFront adds to responses that it sends to viewers.
           type: str
         forwarded_values:
           description:
@@ -550,6 +543,7 @@ options:
                 restriction should apply to.
               - 'See the ISO website for a full list of codes U(https://www.iso.org/obp/ui/#search/code/).'
               type: list
+              elements: str
 
     web_acl_id:
       description:
@@ -1378,7 +1372,7 @@ from ansible.module_utils._text import to_text, to_native
 from ansible_collections.amazon.aws.plugins.module_utils.core import AnsibleAWSModule
 from ansible_collections.amazon.aws.plugins.module_utils.cloudfront_facts import CloudFrontFactsServiceManager
 from ansible.module_utils.common.dict_transformations import recursive_diff
-from ansible_collections.amazon.aws.plugins.module_utils.ec2 import compare_aws_tags, ansible_dict_to_boto3_tag_list, boto3_tag_list_to_ansible_dict
+from ansible_collections.amazon.aws.plugins.module_utils.ec2 import AWSRetry, compare_aws_tags, ansible_dict_to_boto3_tag_list, boto3_tag_list_to_ansible_dict
 from ansible_collections.amazon.aws.plugins.module_utils.ec2 import camel_dict_to_snake_dict, snake_dict_to_camel_dict
 import datetime
 
@@ -1433,7 +1427,7 @@ def ansible_list_to_cloudfront_list(list_items=None, include_quantity=True):
 def create_distribution(client, module, config, tags):
     try:
         if not tags:
-            return client.create_distribution(DistributionConfig=config)['Distribution']
+            return client.create_distribution(aws_retry=True, DistributionConfig=config)['Distribution']
         else:
             distribution_config_with_tags = {
                 'DistributionConfig': config,
@@ -1441,48 +1435,50 @@ def create_distribution(client, module, config, tags):
                     'Items': tags
                 }
             }
-            return client.create_distribution_with_tags(DistributionConfigWithTags=distribution_config_with_tags)['Distribution']
+            return client.create_distribution_with_tags(aws_retry=True, DistributionConfigWithTags=distribution_config_with_tags)['Distribution']
     except (botocore.exceptions.ClientError, botocore.exceptions.BotoCoreError) as e:
         module.fail_json_aws(e, msg="Error creating distribution")
 
 
 def delete_distribution(client, module, distribution):
     try:
-        return client.delete_distribution(Id=distribution['Distribution']['Id'], IfMatch=distribution['ETag'])
+        return client.delete_distribution(aws_retry=True, Id=distribution['Distribution']['Id'], IfMatch=distribution['ETag'])
     except (botocore.exceptions.ClientError, botocore.exceptions.BotoCoreError) as e:
         module.fail_json_aws(e, msg="Error deleting distribution %s" % to_native(distribution['Distribution']))
 
 
 def update_distribution(client, module, config, distribution_id, e_tag):
     try:
-        return client.update_distribution(DistributionConfig=config, Id=distribution_id, IfMatch=e_tag)['Distribution']
+        return client.update_distribution(aws_retry=True, DistributionConfig=config, Id=distribution_id, IfMatch=e_tag)['Distribution']
     except (botocore.exceptions.ClientError, botocore.exceptions.BotoCoreError) as e:
         module.fail_json_aws(e, msg="Error updating distribution to %s" % to_native(config))
 
 
 def tag_resource(client, module, arn, tags):
     try:
-        return client.tag_resource(Resource=arn, Tags=dict(Items=tags))
+        return client.tag_resource(aws_retry=True, Resource=arn, Tags=dict(Items=tags))
     except (botocore.exceptions.ClientError, botocore.exceptions.BotoCoreError) as e:
         module.fail_json_aws(e, msg="Error tagging resource")
 
 
 def untag_resource(client, module, arn, tag_keys):
     try:
-        return client.untag_resource(Resource=arn, TagKeys=dict(Items=tag_keys))
+        return client.untag_resource(aws_retry=True, Resource=arn, TagKeys=dict(Items=tag_keys))
     except (botocore.exceptions.ClientError, botocore.exceptions.BotoCoreError) as e:
         module.fail_json_aws(e, msg="Error untagging resource")
 
 
 def list_tags_for_resource(client, module, arn):
     try:
-        response = client.list_tags_for_resource(Resource=arn)
+        response = client.list_tags_for_resource(aws_retry=True, Resource=arn)
         return boto3_tag_list_to_ansible_dict(response.get('Tags').get('Items'))
     except (botocore.exceptions.ClientError, botocore.exceptions.BotoCoreError) as e:
         module.fail_json_aws(e, msg="Error listing tags for resource")
 
 
 def update_tags(client, module, existing_tags, valid_tags, purge_tags, arn):
+    if valid_tags is None:
+        return False
     changed = False
     to_add, to_remove = compare_aws_tags(existing_tags, valid_tags, purge_tags)
     if to_remove:
@@ -1686,9 +1682,6 @@ class CloudFrontValidationManager(object):
             self.module.fail_json_aws(e, msg="Error validating distribution origins")
 
     def validate_s3_origin_configuration(self, client, existing_config, origin):
-        if not origin['s3_origin_access_identity_enabled']:
-            return None
-
         if origin.get('s3_origin_config', {}).get('origin_access_identity'):
             return origin['s3_origin_config']['origin_access_identity']
 
@@ -1719,13 +1712,20 @@ class CloudFrontValidationManager(object):
                 origin['custom_headers'] = ansible_list_to_cloudfront_list()
             if self.__s3_bucket_domain_identifier in origin.get('domain_name').lower():
                 if origin.get("s3_origin_access_identity_enabled") is not None:
-                    s3_origin_config = self.validate_s3_origin_configuration(client, existing_config, origin)
+                    if origin['s3_origin_access_identity_enabled']:
+                        s3_origin_config = self.validate_s3_origin_configuration(client, existing_config, origin)
+                    else:
+                        s3_origin_config = None
+
+                    del(origin["s3_origin_access_identity_enabled"])
+
                     if s3_origin_config:
                         oai = s3_origin_config
                     else:
                         oai = ""
+
                     origin["s3_origin_config"] = dict(origin_access_identity=oai)
-                    del(origin["s3_origin_access_identity_enabled"])
+
                     if 'custom_origin_config' in origin:
                         self.module.fail_json(msg="s3_origin_access_identity_enabled and custom_origin_config are mutually exclusive")
             else:
@@ -2108,8 +2108,8 @@ def main():
         comment=dict(),
         distribution_id=dict(),
         e_tag=dict(),
-        tags=dict(type='dict', default={}),
-        purge_tags=dict(type='bool', default=False),
+        tags=dict(type='dict', aliases=['resource_tags']),
+        purge_tags=dict(type='bool'),
         alias=dict(),
         aliases=dict(type='list', default=[], elements='str'),
         purge_aliases=dict(type='bool', default=False),
@@ -2148,7 +2148,15 @@ def main():
         ]
     )
 
-    client = module.client('cloudfront')
+    if module.params.get('purge_tags') is None:
+        module.deprecate(
+            'The purge_tags parameter currently defaults to False.'
+            ' For consistency across the collection, this default value'
+            ' will change to True in release 5.0.0.',
+            version='5.0.0', collection_name='community.aws')
+        module.params['purge_tags'] = False
+
+    client = module.client('cloudfront', retry_decorator=AWSRetry.jittered_backoff())
 
     validation_mgr = CloudFrontValidationManager(module)
 
@@ -2226,7 +2234,7 @@ def main():
 
     if create:
         config['CallerReference'] = validation_mgr.validate_caller_reference(caller_reference)
-        result = create_distribution(client, module, config, ansible_dict_to_boto3_tag_list(tags))
+        result = create_distribution(client, module, config, ansible_dict_to_boto3_tag_list(tags or {}))
         result = camel_dict_to_snake_dict(result)
         result['tags'] = list_tags_for_resource(client, module, result['arn'])
 

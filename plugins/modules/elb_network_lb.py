@@ -13,9 +13,10 @@ module: elb_network_lb
 version_added: 1.0.0
 short_description: Manage a Network Load Balancer
 description:
-    - Manage an AWS Network Elastic Load Balancer. See
-      U(https://aws.amazon.com/blogs/aws/new-network-load-balancer-effortless-scaling-to-millions-of-requests-per-second/) for details.
-author: "Rob White (@wimnat)"
+  - Manage an AWS Network Elastic Load Balancer. See
+    U(https://aws.amazon.com/blogs/aws/new-network-load-balancer-effortless-scaling-to-millions-of-requests-per-second/) for details.
+author:
+  - "Rob White (@wimnat)"
 options:
   cross_zone_load_balancing:
     description:
@@ -77,12 +78,6 @@ options:
       - If the I(listeners) parameter is not set then listeners will not be modified.
     default: true
     type: bool
-  purge_tags:
-    description:
-      - If I(purge_tags=true), existing tags will be purged from the resource to match exactly what is defined by I(tags) parameter.
-      - If the I(tags) parameter is not set then tags will not be modified.
-    default: true
-    type: bool
   subnet_mappings:
     description:
       - A list of dicts containing the IDs of the subnets to attach to the load balancer. You can also specify the allocation ID of an Elastic IP
@@ -108,15 +103,10 @@ options:
   state:
     description:
       - Create or destroy the load balancer.
-      - The current default is C(absent).  However, this behavior is inconsistent with other modules
-        and as such the default will change to C(present) in a release after 2022-06-01.
-        To maintain the existing behavior explicitly set I(state=absent).
+      - The default changed from C('absent') to C('present') in release 4.0.0.
     choices: [ 'present', 'absent' ]
     type: str
-  tags:
-    description:
-      - A dictionary of one or more tags to assign to the load balancer.
-    type: dict
+    default: 'present'
   wait:
     description:
       - Whether or not to wait for the network load balancer to reach the desired state.
@@ -131,9 +121,9 @@ options:
     choices: [ 'ipv4', 'dualstack' ]
     type: str
 extends_documentation_fragment:
-- amazon.aws.aws
-- amazon.aws.ec2
-
+  - amazon.aws.aws
+  - amazon.aws.ec2
+  - amazon.aws.tags
 notes:
   - Listeners are matched based on port. If a listener's port is changed then a new listener will be created.
   - Listener rules are matched based on priority. If a rule's priority is changed then a new rule will be created.
@@ -448,28 +438,24 @@ def main():
             subnets=dict(type='list', elements='str'),
             subnet_mappings=dict(type='list', elements='dict'),
             scheme=dict(default='internet-facing', choices=['internet-facing', 'internal']),
-            state=dict(choices=['present', 'absent'], type='str'),
-            tags=dict(type='dict'),
+            state=dict(choices=['present', 'absent'], type='str', default='present'),
+            tags=dict(type='dict', aliases=['resource_tags']),
             wait_timeout=dict(type='int'),
             wait=dict(type='bool'),
             ip_address_type=dict(type='str', choices=['ipv4', 'dualstack'])
         )
     )
 
+    required_if = [
+        ('state', 'present', ('subnets', 'subnet_mappings',), True)
+    ]
+
     module = AnsibleAWSModule(argument_spec=argument_spec,
+                              required_if=required_if,
                               mutually_exclusive=[['subnets', 'subnet_mappings']])
 
     # Check for subnets or subnet_mappings if state is present
     state = module.params.get("state")
-    if state == 'present':
-        if module.params.get("subnets") is None and module.params.get("subnet_mappings") is None:
-            module.fail_json(msg="'subnets' or 'subnet_mappings' is required when state=present")
-
-    if state is None:
-        # See below, unless state==present we delete.  Ouch.
-        module.deprecate('State currently defaults to absent.  This is inconsistent with other modules'
-                         ' and the default will be changed to `present` in a release after 2022-06-01',
-                         date='2022-06-01', collection_name='community.aws')
 
     # Quick check of listeners parameters
     listeners = module.params.get("listeners")

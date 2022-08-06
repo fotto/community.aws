@@ -59,7 +59,7 @@
   - name: test with no role or handler
     lambda:
       name: ansible-testing-fake-should-not-be-created
-      runtime: python3.6
+      runtime: '{{ lambda_python_runtime }}'
     register: result
     ignore_errors: true
   - name: assert failure when called with no parameters
@@ -70,10 +70,20 @@
       - '"handler" in result.msg'
       - '"role" in result.msg'
 
+  - name: test execute lambda with no function arn or name
+    execute_lambda:
+    register: result
+    ignore_errors: true
+  - name: assert failure when called with no parameters
+    assert:
+      that:
+      - result.failed
+      - "result.msg == 'one of the following is required: name, function_arn'"
+
   - name: test state=present with security group but no vpc
     lambda:
       name: '{{ lambda_function_name }}'
-      runtime: 'python3.6'
+      runtime: '{{ lambda_python_runtime }}'
       role: '{{ lambda_role_name }}'
       zip_file: '{{ zip_res.dest }}'
       handler: '{{ omit }}'
@@ -93,22 +103,50 @@
       - '"parameters are required together" in result.msg'
 
   # Prepare minimal Lambda
+  - name: test state=present - upload the lambda (check mode)
+    lambda:
+      name: '{{ lambda_function_name }}'
+      runtime: '{{ lambda_python_runtime }}'
+      handler: '{{ lambda_python_handler }}'
+      role: '{{ lambda_role_name }}'
+      zip_file: '{{ zip_res.dest }}'
+    register: result
+    check_mode: yes
+  - name: assert lambda upload succeeded
+    assert:
+      that:
+      - result.changed
 
   - name: test state=present - upload the lambda
     lambda:
       name: '{{ lambda_function_name }}'
-      runtime: python3.6
-      handler: mini_lambda.handler
+      runtime: '{{ lambda_python_runtime }}'
+      handler: '{{ lambda_python_handler }}'
       role: '{{ lambda_role_name }}'
       zip_file: '{{ zip_res.dest }}'
     register: result
   - name: assert lambda upload succeeded
     assert:
       that:
-      - result is not failed
+      - result.changed
       - result.configuration.tracing_config.mode == "PassThrough"
 
+  - include_tasks: 'tagging.yml'
+
   # Test basic operation of Uploaded lambda
+  - name: test lambda works (check mode)
+    execute_lambda:
+      name: '{{lambda_function_name}}'
+      payload:
+        name: Mr Ansible Tests
+    register: result
+    check_mode: yes
+  - name: assert check mode works correctly
+    assert:
+      that:
+        - result.changed
+        - "'result' not in result"
+
   - name: test lambda works
     execute_lambda:
       name: '{{lambda_function_name}}'
@@ -122,12 +160,31 @@
       - result.result.output.message == "hello Mr Ansible Tests"
 
   # Test updating Lambda
+  - name: test lambda config updates (check mode)
+    lambda:
+      name: '{{lambda_function_name}}'
+      runtime: nodejs14.x
+      tracing_mode: Active
+      handler: '{{ lambda_python_handler }}'
+      role: '{{ lambda_role_name }}'
+      tags:
+        CamelCase: 'ACamelCaseValue'
+        snake_case: 'a_snake_case_value'
+        'Spaced key': 'A value with spaces'
+    register: update_result
+    check_mode: yes
+  - name: assert that update succeeded
+    assert:
+      that:
+      - update_result is not failed
+      - update_result.changed == True
+
   - name: test lambda config updates
     lambda:
       name: '{{lambda_function_name}}'
-      runtime: nodejs10.x
+      runtime: nodejs14.x
       tracing_mode: Active
-      handler: mini_lambda.handler
+      handler: '{{ lambda_python_handler }}'
       role: '{{ lambda_role_name }}'
       tags:
         CamelCase: 'ACamelCaseValue'
@@ -139,15 +196,34 @@
       that:
       - update_result is not failed
       - update_result.changed == True
-      - update_result.configuration.runtime == 'nodejs10.x'
+      - update_result.configuration.runtime == 'nodejs14.x'
       - update_result.configuration.tracing_config.mode == 'Active'
+
+  - name: test no changes are made with the same parameters repeated (check mode)
+    lambda:
+      name: '{{lambda_function_name}}'
+      runtime: nodejs14.x
+      tracing_mode: Active
+      handler: '{{ lambda_python_handler }}'
+      role: '{{ lambda_role_name }}'
+      tags:
+        CamelCase: 'ACamelCaseValue'
+        snake_case: 'a_snake_case_value'
+        'Spaced key': 'A value with spaces'
+    register: update_result
+    check_mode: yes
+  - name: assert that update succeeded
+    assert:
+      that:
+      - update_result is not failed
+      - update_result.changed == False
 
   - name: test no changes are made with the same parameters repeated
     lambda:
       name: '{{lambda_function_name}}'
-      runtime: nodejs10.x
+      runtime: nodejs14.x
       tracing_mode: Active
-      handler: mini_lambda.handler
+      handler: '{{ lambda_python_handler }}'
       role: '{{ lambda_role_name }}'
       tags:
         CamelCase: 'ACamelCaseValue'
@@ -159,15 +235,15 @@
       that:
       - update_result is not failed
       - update_result.changed == False
-      - update_result.configuration.runtime == 'nodejs10.x'
+      - update_result.configuration.runtime == 'nodejs14.x'
       - update_result.configuration.tracing_config.mode == 'Active'
 
   - name: reset config updates for the following tests
     lambda:
       name: '{{lambda_function_name}}'
-      runtime: python3.6
+      runtime: '{{ lambda_python_runtime }}'
       tracing_mode: PassThrough
-      handler: mini_lambda.handler
+      handler: '{{ lambda_python_handler }}'
       role: '{{ lambda_role_name }}'
     register: result
   - name: assert that reset succeeded
@@ -175,29 +251,66 @@
       that:
       - result is not failed
       - result.changed == True
-      - result.configuration.runtime == 'python3.6'
+      - result.configuration.runtime == lambda_python_runtime
       - result.configuration.tracing_config.mode == 'PassThrough'
 
-  # Query the Lambda
-  - name: lambda_info | Gather all infos for given lambda function
+  # Test lambda_info
+  - name: lambda_info | Gather all infos for all lambda functions
     lambda_info:
-      name: '{{ lambda_function_name }}'
       query: all
     register: lambda_infos_all
+    check_mode: yes
   - name: lambda_info | Assert successfull retrieval of all information
     assert:
       that:
       - lambda_infos_all is not failed
-      - lambda_infos_all.function[lambda_function_name].function_name == lambda_function_name
-      - lambda_infos_all.function[lambda_function_name].runtime == "python3.6"
-      - lambda_infos_all.function[lambda_function_name].versions is defined
-      - lambda_infos_all.function[lambda_function_name].aliases is defined
-      - lambda_infos_all.function[lambda_function_name].policy is defined
-      - lambda_infos_all.function[lambda_function_name].mappings is defined
-      - lambda_infos_all.function[lambda_function_name].description == ""
-      - lambda_infos_all.function[lambda_function_name].function_arn is defined
-      - lambda_infos_all.function[lambda_function_name].handler == "mini_lambda.handler"
-      - lambda_infos_all.function[lambda_function_name].tags is defined
+      - lambda_infos_all.functions | length > 0
+      - lambda_infos_all.functions[0].function_name == lambda_function_name
+      - lambda_infos_all.functions[0].runtime == lambda_python_runtime
+      - lambda_infos_all.functions[0].description == ""
+      - lambda_infos_all.functions[0].function_arn is defined
+      - lambda_infos_all.functions[0].handler == lambda_python_handler
+      - lambda_infos_all.functions[0].versions is defined
+      - lambda_infos_all.functions[0].aliases is defined
+      - lambda_infos_all.functions[0].policy is defined
+      - lambda_infos_all.functions[0].mappings is defined
+      - lambda_infos_all.functions[0].tags is defined
+
+  - name: lambda_info | Ensure default query value is 'config' when function name omitted
+    lambda_info:
+    register: lambda_infos_query_config
+    check_mode: yes
+  - name: lambda_info | Assert successfull retrieval of all information
+    assert:
+      that:
+      - lambda_infos_query_config is not failed
+      - lambda_infos_query_config.functions | length > 0
+      - lambda_infos_query_config.functions[0].function_name == lambda_function_name
+      - lambda_infos_query_config.functions[0].runtime == lambda_python_runtime
+      - lambda_infos_query_config.functions[0].description == ""
+      - lambda_infos_query_config.functions[0].function_arn is defined
+      - lambda_infos_query_config.functions[0].handler == lambda_python_handler
+      - lambda_infos_query_config.functions[0].versions is not defined
+      - lambda_infos_query_config.functions[0].aliases is not defined
+      - lambda_infos_query_config.functions[0].policy is not defined
+      - lambda_infos_query_config.functions[0].mappings is not defined
+      - lambda_infos_query_config.functions[0].tags is not defined
+
+  - name: lambda_info | Ensure default query value is 'all' when function name specified
+    lambda_info:
+      name: '{{ lambda_function_name }}'
+    register: lambda_infos_query_all
+  - name: lambda_info | Assert successfull retrieval of all information
+    assert:
+      that:
+      - lambda_infos_query_all is not failed
+      - lambda_infos_query_all.functions | length == 1
+      - lambda_infos_query_all.functions[0].versions|length > 0
+      - lambda_infos_query_all.functions[0].function_name is defined
+      - lambda_infos_query_all.functions[0].policy is defined
+      - lambda_infos_query_all.functions[0].aliases is defined
+      - lambda_infos_query_all.functions[0].mappings is defined
+      - lambda_infos_query_all.functions[0].tags is defined
 
   - name: lambda_info | Gather version infos for given lambda function
     lambda_info:
@@ -208,8 +321,13 @@
     assert:
       that:
       - lambda_infos_versions is not failed
-      - lambda_infos_versions.function[lambda_function_name].versions|length > 0
-      - lambda_infos_versions.function[lambda_function_name].function_name is undefined
+      - lambda_infos_versions.functions | length == 1
+      - lambda_infos_versions.functions[0].versions|length > 0
+      - lambda_infos_versions.functions[0].function_name == lambda_function_name
+      - lambda_infos_versions.functions[0].policy is undefined
+      - lambda_infos_versions.functions[0].aliases is undefined
+      - lambda_infos_versions.functions[0].mappings is undefined
+      - lambda_infos_versions.functions[0].tags is undefined
 
   - name: lambda_info | Gather config infos for given lambda function
     lambda_info:
@@ -220,9 +338,14 @@
     assert:
       that:
       - lambda_infos_config is not failed
-      - lambda_infos_config.function[lambda_function_name].function_name == lambda_function_name
-      - lambda_infos_config.function[lambda_function_name].description is defined
-      - lambda_infos_config.function[lambda_function_name].versions is undefined
+      - lambda_infos_config.functions | length == 1
+      - lambda_infos_config.functions[0].function_name == lambda_function_name
+      - lambda_infos_config.functions[0].description is defined
+      - lambda_infos_config.functions[0].versions is undefined
+      - lambda_infos_config.functions[0].policy is undefined
+      - lambda_infos_config.functions[0].aliases is undefined
+      - lambda_infos_config.functions[0].mappings is undefined
+      - lambda_infos_config.functions[0].tags is undefined
 
   - name: lambda_info | Gather policy infos for given lambda function
     lambda_info:
@@ -233,8 +356,13 @@
     assert:
       that:
       - lambda_infos_policy is not failed
-      - lambda_infos_policy.function[lambda_function_name].policy is defined
-      - lambda_infos_policy.function[lambda_function_name].versions is undefined
+      - lambda_infos_policy.functions | length == 1
+      - lambda_infos_policy.functions[0].policy is defined
+      - lambda_infos_policy.functions[0].versions is undefined
+      - lambda_infos_policy.functions[0].function_name == lambda_function_name
+      - lambda_infos_policy.functions[0].aliases is undefined
+      - lambda_infos_policy.functions[0].mappings is undefined
+      - lambda_infos_policy.functions[0].tags is undefined
 
   - name: lambda_info | Gather aliases infos for given lambda function
     lambda_info:
@@ -245,7 +373,13 @@
     assert:
       that:
       - lambda_infos_aliases is not failed
-      - lambda_infos_aliases.function[lambda_function_name].aliases is defined
+      - lambda_infos_aliases.functions | length == 1
+      - lambda_infos_aliases.functions[0].aliases is defined
+      - lambda_infos_aliases.functions[0].versions is undefined
+      - lambda_infos_aliases.functions[0].function_name == lambda_function_name
+      - lambda_infos_aliases.functions[0].policy is undefined
+      - lambda_infos_aliases.functions[0].mappings is undefined
+      - lambda_infos_aliases.functions[0].tags is undefined
 
   - name: lambda_info | Gather mappings infos for given lambda function
     lambda_info:
@@ -256,16 +390,22 @@
     assert:
       that:
       - lambda_infos_mappings is not failed
-      - lambda_infos_mappings.function[lambda_function_name].mappings is defined
+      - lambda_infos_mappings.functions | length == 1
+      - lambda_infos_mappings.functions[0].mappings is defined
+      - lambda_infos_mappings.functions[0].versions is undefined
+      - lambda_infos_mappings.functions[0].function_name == lambda_function_name
+      - lambda_infos_mappings.functions[0].aliases is undefined
+      - lambda_infos_mappings.functions[0].policy is undefined
+      - lambda_infos_mappings.functions[0].tags is undefined
 
   # More Lambda update tests
   - name: test state=present with all nullable variables explicitly set to null
     lambda:
       name: '{{lambda_function_name}}'
-      runtime: python3.6
+      runtime: '{{ lambda_python_runtime }}'
       role: '{{ lambda_role_name }}'
       zip_file: '{{zip_res.dest}}'
-      handler: mini_lambda.handler
+      handler: '{{ lambda_python_handler }}'
       description: null
       vpc_subnet_ids: null
       vpc_security_group_ids: null
@@ -278,11 +418,28 @@
       - result is not failed
       - result.changed == False
 
+  - name: test putting an environment variable changes lambda (check mode)
+    lambda:
+      name: '{{lambda_function_name}}'
+      runtime: '{{ lambda_python_runtime }}'
+      handler: '{{ lambda_python_handler }}'
+      role: '{{ lambda_role_name }}'
+      zip_file: '{{zip_res.dest}}'
+      environment_variables:
+        EXTRA_MESSAGE: I think you are great!!
+    register: result
+    check_mode: yes
+  - name: assert lambda upload succeeded
+    assert:
+      that:
+      - result is not failed
+      - result.changed == True
+
   - name: test putting an environment variable changes lambda
     lambda:
       name: '{{lambda_function_name}}'
-      runtime: python3.6
-      handler: mini_lambda.handler
+      runtime: '{{ lambda_python_runtime }}'
+      handler: '{{ lambda_python_handler }}'
       role: '{{ lambda_role_name }}'
       zip_file: '{{zip_res.dest}}'
       environment_variables:
@@ -293,6 +450,8 @@
       that:
       - result is not failed
       - result.changed == True
+      - result.configuration.environment.variables.extra_message == "I think you are great!!"
+
   - name: test lambda works
     execute_lambda:
       name: '{{lambda_function_name}}'
@@ -306,6 +465,19 @@
       - result.result.output.message == "hello Mr Ansible Tests. I think you are great!!"
 
   # Deletion behavious
+  - name: test state=absent (expect changed=True) (check mode)
+    lambda:
+      name: '{{lambda_function_name}}'
+      state: absent
+    register: result
+    check_mode: yes
+
+  - name: assert state=absent
+    assert:
+      that:
+      - result is not failed
+      - result is changed
+
   - name: test state=absent (expect changed=True)
     lambda:
       name: '{{lambda_function_name}}'
@@ -317,6 +489,19 @@
       that:
       - result is not failed
       - result is changed
+
+  - name: test state=absent (expect changed=False) when already deleted (check mode)
+    lambda:
+      name: '{{lambda_function_name}}'
+      state: absent
+    register: result
+    check_mode: yes
+
+  - name: assert state=absent
+    assert:
+      that:
+      - result is not failed
+      - result is not changed
 
   - name: test state=absent (expect changed=False) when already deleted
     lambda:
@@ -334,8 +519,8 @@
   - name: parallel lambda creation 1/4
     lambda:
       name: '{{lambda_function_name}}_1'
-      runtime: python3.6
-      handler: mini_lambda.handler
+      runtime: '{{ lambda_python_runtime }}'
+      handler: '{{ lambda_python_handler }}'
       role: '{{ lambda_role_name }}'
       zip_file: '{{zip_res.dest}}'
     async: 1000
@@ -343,8 +528,8 @@
   - name: parallel lambda creation 2/4
     lambda:
       name: '{{lambda_function_name}}_2'
-      runtime: python3.6
-      handler: mini_lambda.handler
+      runtime: '{{ lambda_python_runtime }}'
+      handler: '{{ lambda_python_handler }}'
       role: '{{ lambda_role_name }}'
       zip_file: '{{zip_res.dest}}'
     async: 1000
@@ -352,8 +537,8 @@
   - name: parallel lambda creation 3/4
     lambda:
       name: '{{lambda_function_name}}_3'
-      runtime: python3.6
-      handler: mini_lambda.handler
+      runtime: '{{ lambda_python_runtime }}'
+      handler: '{{ lambda_python_handler }}'
       role: '{{ lambda_role_name }}'
       zip_file: '{{zip_res.dest}}'
     async: 1000
@@ -361,8 +546,8 @@
   - name: parallel lambda creation 4/4
     lambda:
       name: '{{lambda_function_name}}_4'
-      runtime: python3.6
-      handler: mini_lambda.handler
+      runtime: '{{ lambda_python_runtime }}'
+      handler: '{{ lambda_python_handler }}'
       role: '{{ lambda_role_name }}'
       zip_file: '{{zip_res.dest}}'
     register: result
@@ -403,11 +588,19 @@
       - result is not failed
 
   always:
-  - name: ensure function is absent at end of test
+
+  - name: ensure functions are absent at end of test
     lambda:
-      name: '{{lambda_function_name}}'
+      name: "{{ item }}"
       state: absent
     ignore_errors: true
+    with_items:
+      - "{{ lambda_function_name }}"
+      - "{{ lambda_function_name }}_1"
+      - "{{ lambda_function_name }}_2"
+      - "{{ lambda_function_name }}_3"
+      - "{{ lambda_function_name }}_4"
+
   - name: ensure role has been removed at end of test
     iam_role:
       name: '{{ lambda_role_name }}'

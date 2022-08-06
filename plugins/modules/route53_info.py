@@ -204,6 +204,287 @@ EXAMPLES = r'''
       register: RECORDS
 '''
 
+RETURN = r'''
+resource_record_sets:
+    description: A list of resource record sets returned by list_resource_record_sets in boto3.
+    returned: when I(query=record_sets)
+    type: list
+    elements: dict
+    contains:
+        name:
+            description: The name of a record in the specified hosted zone.
+            type: str
+            sample: 'www.example.com'
+        type:
+            description: The DNS record type.
+            type: str
+            sample: 'A'
+        ttl:
+            description: The resource record cache time to live (TTL), in seconds.
+            type: int
+            sample: 60
+        set_identifier:
+            description: An identifier that differentiates among multiple resource record sets that have the same combination of name and type.
+            type: str
+            sample: 'abcd'
+        resource_records:
+            description: Information about the resource records.
+            type: list
+            elements: dict
+            contains:
+                value:
+                    description: The current or new DNS record value.
+                    type: str
+                    sample: 'ns-12.awsdns-34.com.'
+        geo_location:
+            description: The specified geographic location for which the Route53 responds to based on location.
+            type: dict
+            elements: str
+            contains:
+                continent_code:
+                    description: The two-letter code for the continent.
+                    type: str
+                    sample: 'NA'
+                country_code:
+                    description: The two-letter code for a country.
+                    type: str
+                    sample: 'US'
+                subdivision_code:
+                    description: The two-letter code for a state of the United States
+                    type: str
+                    sample: 'NY'
+    version_added: 4.0.0
+hosted_zones:
+    description: A list of hosted zones returned by list_hosted_zones in boto3.
+    returned: when I(query=hosted_zone)
+    type: list
+    elements: dict
+    contains:
+        id:
+            description: The ID of the hosted zone assigned by Amazon Route53 to the hosted zone at the creation time.
+            type: str
+            sample: '/hostedzone/Z01234567AB1234567890'
+        name:
+            description: The name of the domain.
+            type: str
+            sample: 'example.io'
+        resource_record_set_count:
+            description: The number of resource record sets in the hosted zone.
+            type: int
+            sample: 3
+        caller_reference:
+            description: The value specified for CallerReference at the time of hosted zone creation.
+            type: str
+            sample: '01d0db12-x0x9-12a3-1234-0z000z00zz0z'
+        config:
+            description: A dict that contains Comment and PrivateZone elements.
+            type: dict
+            contains:
+                comment:
+                    description: Any comments that included about in the hosted zone.
+                    type: str
+                    sample: 'HostedZone created by Route53 Registrar'
+                private_zone:
+                    description: A value that indicates whether this is a private hosted zone or not.
+                    type: bool
+                    sample: false
+    version_added: 4.0.0
+health_checks:
+    description: A list of Route53 health checks returned by list_health_checks in boto3.
+    type: list
+    elements: dict
+    returned: when I(query=health_check)
+    contains:
+        id:
+            description: The identifier that Amazon Route53 assigned to the health check at the time of creation.
+            type: str
+            sample: '12345cdc-2cc4-1234-bed2-123456abc1a2'
+        health_check_version:
+            description: The version of the health check.
+            type: str
+            sample: 1
+        caller_reference:
+            description: A unique string that you specified when you created the health check.
+            type: str
+            sample: '01d0db12-x0x9-12a3-1234-0z000z00zz0z'
+        health_check_config:
+            description: A dict that contains detailed information about one health check.
+            type: dict
+            contains:
+                disabled:
+                    description: Whether Route53 should stop performing health checks on a endpoint.
+                    type: bool
+                    sample: false
+                enable_sni:
+                    description: Whether Route53 should send value of FullyQualifiedDomainName to endpoint in client_hello message during TLS negotiation.
+                    type: bool
+                    sample: true
+                failure_threshold:
+                    description: The number of consecutive health checks that an endpoint must pass/fail for Route53 to change current status of endpoint.
+                    type: int
+                    sample: 3
+                fully_qualified_domain_name:
+                    description: The fully qualified DNS name of the endpoint on which Route53 performs health checks.
+                    type: str
+                    sample: 'hello'
+                inverted:
+                    description: Whether Route53 should invert the status of a health check.
+                    type: bool
+                    sample: false
+                ip_address:
+                    description: The IPv4/IPv6 IP address of the endpoint that Route53 should perform health checks on.
+                    type: str
+                    sample: 192.0.2.44
+                measure_latency:
+                    description: Whether Route53 should measure latency between health checkers in multiple AWS regions and the endpoint.
+                    type: bool
+                    sample: false
+                port:
+                    description: The port of the endpoint that Route53 should perform health checks on.
+                    type: int
+                    sample: 80
+                request_interval:
+                    description: The number of seconds between the time that Route53 gets a response from endpoint and the next health check request.
+                    type: int
+                    sample: 30
+                resource_path:
+                    description: The path that Route53 requests when performing health checks.
+                    type: str
+                    sample: '/welcome.html'
+                search_string:
+                    description: The string that Route53 uses to search for in the response body from specified resource.
+                    type: str
+                    sample: 'test-string-to-match'
+                type:
+                    description: The type of the health check.
+                    type: str
+                    sample: HTTPS
+    version_added: 4.0.0
+checker_ip_ranges:
+    description: A list of IP ranges in CIDR format for Amazon Route 53 health checkers.
+    returned: when I(query=checker_ip_range)
+    type: list
+    elements: str
+    version_added: 4.1.0
+delegation_sets:
+    description: A list of dicts that contains information about the reusable delegation set.
+    returned: when I(query=reusable_delegation_set)
+    type: list
+    elements: dict
+    version_added: 4.1.0
+health_check:
+    description: A dict of Route53 health check details returned by get_health_check_status in boto3.
+    type: dict
+    returned: when I(query=health_check) and I(health_check_method=details)
+    contains:
+        id:
+            description: The identifier that Amazon Route53 assigned to the health check at the time of creation.
+            type: str
+            sample: '12345cdc-2cc4-1234-bed2-123456abc1a2'
+        health_check_version:
+            description: The version of the health check.
+            type: str
+            sample: 1
+        caller_reference:
+            description: A unique string that you specified when you created the health check.
+            type: str
+            sample: '01d0db12-x0x9-12a3-1234-0z000z00zz0z'
+        health_check_config:
+            description: A dict that contains detailed information about one health check.
+            type: dict
+            contains:
+                disabled:
+                    description: Whether Route53 should stop performing health checks on a endpoint.
+                    type: bool
+                    sample: false
+                enable_sni:
+                    description: Whether Route53 should send value of FullyQualifiedDomainName to endpoint in client_hello message during TLS negotiation.
+                    type: bool
+                    sample: true
+                failure_threshold:
+                    description: The number of consecutive health checks that an endpoint must pass/fail for Route53 to change current status of endpoint.
+                    type: int
+                    sample: 3
+                fully_qualified_domain_name:
+                    description: The fully qualified DNS name of the endpoint on which Route53 performs health checks.
+                    type: str
+                    sample: 'hello'
+                inverted:
+                    description: Whether Route53 should invert the status of a health check.
+                    type: bool
+                    sample: false
+                ip_address:
+                    description: The IPv4/IPv6 IP address of the endpoint that Route53 should perform health checks on.
+                    type: str
+                    sample: 192.0.2.44
+                measure_latency:
+                    description: Whether Route53 should measure latency between health checkers in multiple AWS regions and the endpoint.
+                    type: bool
+                    sample: false
+                port:
+                    description: The port of the endpoint that Route53 should perform health checks on.
+                    type: int
+                    sample: 80
+                request_interval:
+                    description: The number of seconds between the time that Route53 gets a response from endpoint and the next health check request.
+                    type: int
+                    sample: 30
+                resource_path:
+                    description: The path that Route53 requests when performing health checks.
+                    type: str
+                    sample: '/welcome.html'
+                search_string:
+                    description: The string that Route53 uses to search for in the response body from specified resource.
+                    type: str
+                    sample: 'test-string-to-match'
+                type:
+                    description: The type of the health check.
+                    type: str
+                    sample: HTTPS
+    version_added: 4.1.0
+ResourceRecordSets:
+    description: A deprecated CamelCased list of resource record sets returned by list_resource_record_sets in boto3. \
+                 This list contains same elements/parameters as it's snake_cased version mentioned above. \
+                 This field is deprecated and will be removed in 6.0.0 version release.
+    returned: when I(query=record_sets)
+    type: list
+    elements: dict
+HostedZones:
+    description: A deprecated CamelCased list of hosted zones returned by list_hosted_zones in boto3. \
+                 This list contains same elements/parameters as it's snake_cased version mentioned above. \
+                 This field is deprecated and will be removed in 6.0.0 version release.
+    returned: when I(query=hosted_zone)
+    type: list
+    elements: dict
+HealthChecks:
+    description: A deprecated CamelCased list of Route53 health checks returned by list_health_checks in boto3. \
+                 This list contains same elements/parameters as it's snake_cased version mentioned above. \
+                 This field is deprecated and will be removed in 6.0.0 version release.
+    type: list
+    elements: dict
+    returned: when I(query=health_check)
+CheckerIpRanges:
+    description: A deprecated CamelCased list of IP ranges in CIDR format for Amazon Route 53 health checkers.\
+                 This list contains same elements/parameters as it's snake_cased version mentioned abobe. \
+                 This field is deprecated and will be removed in 6.0.0 version release.
+    type: list
+    elements: str
+    returned: when I(query=checker_ip_range)
+DelegationSets:
+    description: A deprecated CamelCased list of dicts that contains information about the reusable delegation set. \
+                 This list contains same elements/parameters as it's snake_cased version mentioned above. \
+                 This field is deprecated and will be removed in 6.0.0 version release.
+    type: list
+    elements: dict
+    returned: when I(query=reusable_delegation_set)
+HealthCheck:
+    description: A deprecated CamelCased dict of Route53 health check details returned by get_health_check_status in boto3. \
+                 This dict contains same elements/parameters as it's snake_cased version mentioned above. \
+                 This field is deprecated and will be removed in 6.0.0 version release.
+    type: dict
+    returned: when I(query=health_check) and I(health_check_method=details)
+'''
+
 try:
     import botocore
 except ImportError:
@@ -212,9 +493,18 @@ except ImportError:
 from ansible.module_utils._text import to_native
 
 from ansible_collections.amazon.aws.plugins.module_utils.core import AnsibleAWSModule
+from ansible_collections.amazon.aws.plugins.module_utils.ec2 import AWSRetry
+from ansible_collections.amazon.aws.plugins.module_utils.ec2 import camel_dict_to_snake_dict
 
 
-def get_hosted_zone(client, module):
+# Split out paginator to allow for the backoff decorator to function
+@AWSRetry.jittered_backoff()
+def _paginated_result(paginator_name, **params):
+    paginator = client.get_paginator(paginator_name)
+    return paginator.paginate(**params).build_full_result()
+
+
+def get_hosted_zone():
     params = dict()
 
     if module.params.get('hosted_zone_id'):
@@ -225,7 +515,7 @@ def get_hosted_zone(client, module):
     return client.get_hosted_zone(**params)
 
 
-def reusable_delegation_set_details(client, module):
+def reusable_delegation_set_details():
     params = dict()
 
     if not module.params.get('delegation_set_id'):
@@ -243,10 +533,16 @@ def reusable_delegation_set_details(client, module):
         params['DelegationSetId'] = module.params.get('delegation_set_id')
         results = client.get_reusable_delegation_set(**params)
 
+    results['delegation_sets'] = results['DelegationSets']
+    module.deprecate("The 'CamelCase' return values with key 'DelegationSets' is deprecated and \
+                    will be replaced by 'snake_case' return values with key 'delegation_sets'. \
+                    Both case values are returned for now.",
+                     date='2025-01-01', collection_name='community.aws')
+
     return results
 
 
-def list_hosted_zones(client, module):
+def list_hosted_zones():
     params = dict()
 
     # Set PaginationConfig with max_items
@@ -261,15 +557,22 @@ def list_hosted_zones(client, module):
     if module.params.get('delegation_set_id'):
         params['DelegationSetId'] = module.params.get('delegation_set_id')
 
-    paginator = client.get_paginator('list_hosted_zones')
-    zones = paginator.paginate(**params).build_full_result()['HostedZones']
+    zones = _paginated_result('list_hosted_zones', **params)['HostedZones']
+    snaked_zones = [camel_dict_to_snake_dict(zone) for zone in zones]
+
+    module.deprecate("The 'CamelCase' return values with key 'HostedZones' and 'list' are deprecated and \
+                    will be replaced by 'snake_case' return values with key 'hosted_zones'. \
+                    Both case values are returned for now.",
+                     date='2025-01-01', collection_name='community.aws')
+
     return {
         "HostedZones": zones,
         "list": zones,
+        "hosted_zones": snaked_zones,
     }
 
 
-def list_hosted_zones_by_name(client, module):
+def list_hosted_zones_by_name():
     params = dict()
 
     if module.params.get('hosted_zone_id'):
@@ -287,7 +590,7 @@ def list_hosted_zones_by_name(client, module):
     return client.list_hosted_zones_by_name(**params)
 
 
-def change_details(client, module):
+def change_details():
     params = dict()
 
     if module.params.get('change_id'):
@@ -299,11 +602,18 @@ def change_details(client, module):
     return results
 
 
-def checker_ip_range_details(client, module):
-    return client.get_checker_ip_ranges()
+def checker_ip_range_details():
+    results = client.get_checker_ip_ranges()
+    results['checker_ip_ranges'] = results['CheckerIpRanges']
+    module.deprecate("The 'CamelCase' return values with key 'CheckerIpRanges' is deprecated and \
+                    will be replaced by 'snake_case' return values with key 'checker_ip_ranges'. \
+                    Both case values are returned for now.",
+                     date='2025-01-01', collection_name='community.aws')
+
+    return results
 
 
-def get_count(client, module):
+def get_count():
     if module.params.get('query') == 'health_check':
         results = client.get_health_check_count()
     else:
@@ -312,7 +622,7 @@ def get_count(client, module):
     return results
 
 
-def get_health_check(client, module):
+def get_health_check():
     params = dict()
 
     if not module.params.get('health_check_id'):
@@ -327,10 +637,16 @@ def get_health_check(client, module):
     elif module.params.get('health_check_method') == 'status':
         results = client.get_health_check_status(**params)
 
+    results['health_check'] = camel_dict_to_snake_dict(results['HealthCheck'])
+    module.deprecate("The 'CamelCase' return values with key 'HealthCheck' is deprecated and \
+                    will be replaced by 'snake_case' return values with key 'health_check'. \
+                    Both case values are returned for now.",
+                     date='2025-01-01', collection_name='community.aws')
+
     return results
 
 
-def get_resource_tags(client, module):
+def get_resource_tags():
     params = dict()
 
     if module.params.get('resource_id'):
@@ -346,7 +662,7 @@ def get_resource_tags(client, module):
     return client.list_tags_for_resources(**params)
 
 
-def list_health_checks(client, module):
+def list_health_checks():
     params = dict()
 
     if module.params.get('next_marker'):
@@ -358,15 +674,22 @@ def list_health_checks(client, module):
             MaxItems=module.params.get('max_items')
         )
 
-    paginator = client.get_paginator('list_health_checks')
-    health_checks = paginator.paginate(**params).build_full_result()['HealthChecks']
+    health_checks = _paginated_result('list_health_checks', **params)['HealthChecks']
+    snaked_health_checks = [camel_dict_to_snake_dict(health_check) for health_check in health_checks]
+
+    module.deprecate("The 'CamelCase' return values with key 'HealthChecks' and 'list' are deprecated and \
+                    will be replaced by 'snake_case' return values with key 'health_checks'. \
+                    Both case values are returned for now.",
+                     date='2025-01-01', collection_name='community.aws')
+
     return {
         "HealthChecks": health_checks,
         "list": health_checks,
+        "health_checks": snaked_health_checks,
     }
 
 
-def record_sets_details(client, module):
+def record_sets_details():
     params = dict()
 
     if module.params.get('hosted_zone_id'):
@@ -390,16 +713,22 @@ def record_sets_details(client, module):
             MaxItems=module.params.get('max_items')
         )
 
-    paginator = client.get_paginator('list_resource_record_sets')
-    record_sets = paginator.paginate(**params).build_full_result()['ResourceRecordSets']
+    record_sets = _paginated_result('list_resource_record_sets', **params)['ResourceRecordSets']
+    snaked_record_sets = [camel_dict_to_snake_dict(record_set) for record_set in record_sets]
+
+    module.deprecate("The 'CamelCase' return values with key 'ResourceRecordSets' and 'list' are deprecated and \
+                    will be replaced by 'snake_case' return values with key 'resource_record_sets'. \
+                    Both case values are returned for now.",
+                     date='2025-01-01', collection_name='community.aws')
 
     return {
         "ResourceRecordSets": record_sets,
         "list": record_sets,
+        "resource_record_sets": snaked_record_sets,
     }
 
 
-def health_check_details(client, module):
+def health_check_details():
     health_check_invocations = {
         'list': list_health_checks,
         'details': get_health_check,
@@ -409,11 +738,11 @@ def health_check_details(client, module):
         'tags': get_resource_tags,
     }
 
-    results = health_check_invocations[module.params.get('health_check_method')](client, module)
+    results = health_check_invocations[module.params.get('health_check_method')]()
     return results
 
 
-def hosted_zone_details(client, module):
+def hosted_zone_details():
     hosted_zone_invocations = {
         'details': get_hosted_zone,
         'list': list_hosted_zones,
@@ -422,11 +751,14 @@ def hosted_zone_details(client, module):
         'tags': get_resource_tags,
     }
 
-    results = hosted_zone_invocations[module.params.get('hosted_zone_method')](client, module)
+    results = hosted_zone_invocations[module.params.get('hosted_zone_method')]()
     return results
 
 
 def main():
+    global module
+    global client
+
     argument_spec = dict(
         query=dict(choices=[
             'change',
@@ -475,7 +807,7 @@ def main():
     )
 
     try:
-        route53 = module.client('route53')
+        client = module.client('route53', retry_decorator=AWSRetry.jittered_backoff())
     except (botocore.exceptions.ClientError, botocore.exceptions.BotoCoreError) as e:
         module.fail_json_aws(e, msg='Failed to connect to AWS')
 
@@ -490,7 +822,7 @@ def main():
 
     results = dict(changed=False)
     try:
-        results = invocations[module.params.get('query')](route53, module)
+        results = invocations[module.params.get('query')]()
     except (botocore.exceptions.ClientError, botocore.exceptions.BotoCoreError) as e:
         module.fail_json(msg=to_native(e))
 

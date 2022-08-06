@@ -33,6 +33,13 @@ options:
             - JSON or dict that represents the new policy.
         required: false
         type: json
+    force_absent:
+        description:
+            - If I(force_absent=true), the repository will be removed, even if images are present.
+        required: false
+        default: false
+        type: bool
+        version_added: 4.1.0
     force_set_policy:
         description:
             - If I(force_set_policy=false), it prevents setting a policy that would prevent you from
@@ -43,11 +50,9 @@ options:
     purge_policy:
         description:
             - If yes, remove the policy from the repository.
-            - Alias C(delete_policy) has been deprecated and will be removed after 2022-06-01.
             - Defaults to C(false).
         required: false
         type: bool
-        aliases: [ delete_policy ]
     image_tag_mutability:
         description:
             - Configure whether repository should be mutable (ie. an already existing tag can be overwritten) or not.
@@ -169,11 +174,16 @@ created:
 name:
     type: str
     description: The name of the repository
-    returned: "when state == 'absent'"
+    returned: I(state=absent)
+policy:
+    type: dict
+    description: The existing, created or updated repository policy.
+    returned: I(state=present)
+    version_added: 4.0.0
 repository:
     type: dict
     description: The created or updated repository
-    returned: "when state == 'present'"
+    returned: I(state=present)
     sample:
         createdAt: '2017-01-17T08:41:32-06:00'
         registryId: '999999999999'
@@ -274,10 +284,10 @@ class EcsEcr:
                     'could not find repository {0}'.format(printable))
             return
 
-    def delete_repository(self, registry_id, name):
+    def delete_repository(self, registry_id, name, force):
         if not self.check_mode:
             repo = self.ecr.delete_repository(
-                repositoryName=name, **build_kwargs(registry_id))
+                repositoryName=name, force=force, **build_kwargs(registry_id))
             self.changed = True
             return repo
         else:
@@ -394,6 +404,7 @@ def run(ecr, params):
         state = params['state']
         policy_text = params['policy']
         purge_policy = params['purge_policy']
+        force_absent = params['force_absent']
         registry_id = params['registry_id']
         force_set_policy = params['force_set_policy']
         image_tag_mutability = params['image_tag_mutability'].upper()
@@ -496,6 +507,11 @@ def run(ecr, params):
                     result['policy'] = policy_text
                     raise
 
+            else:
+                original_policy = ecr.get_repository_policy(registry_id, name)
+                if original_policy:
+                    result['policy'] = original_policy
+
             original_scan_on_push = ecr.get_repository(registry_id, name)
             if original_scan_on_push is not None:
                 if scan_on_push != original_scan_on_push['imageScanningConfiguration']['scanOnPush']:
@@ -506,7 +522,7 @@ def run(ecr, params):
         elif state == 'absent':
             result['name'] = name
             if repo:
-                ecr.delete_repository(registry_id, name)
+                ecr.delete_repository(registry_id, name, force_absent)
                 result['changed'] = True
 
     except Exception as err:
@@ -532,12 +548,12 @@ def main():
         registry_id=dict(required=False),
         state=dict(required=False, choices=['present', 'absent'],
                    default='present'),
+        force_absent=dict(required=False, type='bool', default=False),
         force_set_policy=dict(required=False, type='bool', default=False),
         policy=dict(required=False, type='json'),
         image_tag_mutability=dict(required=False, choices=['mutable', 'immutable'],
                                   default='mutable'),
-        purge_policy=dict(required=False, type='bool', aliases=['delete_policy'],
-                          deprecated_aliases=[dict(name='delete_policy', date='2022-06-01', collection_name='community.aws')]),
+        purge_policy=dict(required=False, type='bool'),
         lifecycle_policy=dict(required=False, type='json'),
         purge_lifecycle_policy=dict(required=False, type='bool'),
         scan_on_push=(dict(required=False, type='bool', default=False))

@@ -9,6 +9,7 @@ __metaclass__ = type
 DOCUMENTATION = '''
 ---
 module: mq_broker_info
+<<<<<<< HEAD
 version_added: 0.9.0
 short_description: retrieve MQ Broker details
 description:
@@ -31,6 +32,26 @@ extends_documentation_fragment:
 - amazon.aws.aws
 - amazon.aws.ec2
 
+=======
+version_added: 4.1.0
+short_description: Retrieve MQ Broker details
+description:
+  - Get details about a broker.
+author:
+  - FCO (@fotto)
+options:
+  broker_id:
+    description: Get details for broker with specified ID.
+    type: str
+  broker_name:
+    description:
+      - Get details for broker with specified Name.
+      - Is ignored if I(broker_id) is specified.
+    type: str
+extends_documentation_fragment:
+  - amazon.aws.aws
+  - amazon.aws.ec2
+>>>>>>> 4b5a4eb47689b7250c566e93ef5dcdadc1a89c98
 '''
 
 
@@ -38,21 +59,31 @@ EXAMPLES = '''
 - name: get current broker settings by id
   amazon.aws.mq_broker_info:
     broker_id: "aws-mq-broker-id"
+<<<<<<< HEAD
     region: "{{ aws_region }}"
+=======
+>>>>>>> 4b5a4eb47689b7250c566e93ef5dcdadc1a89c98
   register: broker_info
 - name: get current broker settings by name setting all credential parameters explicitly
   amazon.aws.mq_broker_info:
     broker_name: "aws-mq-broker-name"
+<<<<<<< HEAD
     region: "{{ aws_region }}"
     aws_access_key: "{{ aws_access_key_id }}"
     aws_secret_key: "{{ aws_secret_access_key }}"
     security_token: "{{ aws_session_token }}"
+=======
+>>>>>>> 4b5a4eb47689b7250c566e93ef5dcdadc1a89c98
   register: broker_info
 '''
 
 RETURN = '''
 broker:
+<<<<<<< HEAD
     description: API response of describe_broker()
+=======
+    description: API response of describe_broker().
+>>>>>>> 4b5a4eb47689b7250c566e93ef5dcdadc1a89c98
     type: dict
     returned: success
 '''
@@ -63,12 +94,16 @@ except ImportError as ex:
     # handled by AnsibleAWSModule
     pass
 
+<<<<<<< HEAD
 try:
     # when moving to amazon.aws change import to
     # from ansible.module_utils.core import AnsibleAWSModule
     from ansible_collections.amazon.aws.plugins.module_utils.core import AnsibleAWSModule
 except ImportError as ex:
     raise ex
+=======
+from ansible_collections.amazon.aws.plugins.module_utils.core import AnsibleAWSModule
+>>>>>>> 4b5a4eb47689b7250c566e93ef5dcdadc1a89c98
 
 
 def get_broker_id(conn, module):

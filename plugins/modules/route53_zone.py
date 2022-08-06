@@ -5,7 +5,7 @@
 from __future__ import absolute_import, division, print_function
 __metaclass__ = type
 
-DOCUMENTATION = '''
+DOCUMENTATION = r'''
 module: route53_zone
 short_description: add or delete Route53 zones
 version_added: 1.0.0
@@ -46,26 +46,17 @@ options:
             - The reusable delegation set ID to be associated with the zone.
             - Note that you can't associate a reusable delegation set with a private hosted zone.
         type: str
-    tags:
-        description:
-            - A hash/dictionary of tags to add to the new instance or to add/remove from an existing one.
-        type: dict
-        version_added: 2.1.0
-    purge_tags:
-        description:
-            - Delete any tags not specified in the task that are on the zone.
-              This means you have to specify all the desired tags on each task affecting a zone.
-        default: false
-        type: bool
-        version_added: 2.1.0
 extends_documentation_fragment:
-- amazon.aws.aws
-- amazon.aws.ec2
-
-author: "Christopher Troup (@minichate)"
+    - amazon.aws.aws
+    - amazon.aws.ec2
+    - amazon.aws.tags.deprecated_purge
+notes:
+    - Support for I(tags) and I(purge_tags) was added in release 2.1.0.
+author:
+    - "Christopher Troup (@minichate)"
 '''
 
-EXAMPLES = '''
+EXAMPLES = r'''
 - name: create a public zone
   community.aws.route53_zone:
     zone: example.com
@@ -105,7 +96,7 @@ EXAMPLES = '''
     purge_tags: true
 '''
 
-RETURN = '''
+RETURN = r'''
 comment:
     description: optional hosted zone comment
     returned: when hosted zone exists
@@ -149,6 +140,7 @@ tags:
 
 import time
 from ansible_collections.amazon.aws.plugins.module_utils.core import AnsibleAWSModule
+from ansible_collections.amazon.aws.plugins.module_utils.ec2 import AWSRetry
 from ansible_collections.community.aws.plugins.module_utils.route53 import manage_tags
 from ansible_collections.community.aws.plugins.module_utils.route53 import get_tags
 
@@ -158,10 +150,15 @@ except ImportError:
     pass  # caught by AnsibleAWSModule
 
 
-def find_zones(module, client, zone_in, private_zone):
+@AWSRetry.jittered_backoff()
+def _list_zones():
+    paginator = client.get_paginator('list_hosted_zones')
+    return paginator.paginate().build_full_result()
+
+
+def find_zones(zone_in, private_zone):
     try:
-        paginator = client.get_paginator('list_hosted_zones')
-        results = paginator.paginate().build_full_result()
+        results = _list_zones()
     except (BotoCoreError, ClientError) as e:
         module.fail_json_aws(e, msg="Could not list current hosted zones")
     zones = []
@@ -176,7 +173,7 @@ def find_zones(module, client, zone_in, private_zone):
     return zones
 
 
-def create(module, client, matching_zones):
+def create(matching_zones):
     zone_in = module.params.get('zone').lower()
     vpc_id = module.params.get('vpc_id')
     vpc_region = module.params.get('vpc_region')
@@ -201,9 +198,9 @@ def create(module, client, matching_zones):
     }
 
     if private_zone:
-        changed, result = create_or_update_private(module, client, matching_zones, record)
+        changed, result = create_or_update_private(matching_zones, record)
     else:
-        changed, result = create_or_update_public(module, client, matching_zones, record)
+        changed, result = create_or_update_public(matching_zones, record)
 
     zone_id = result.get('zone_id')
     if zone_id:
@@ -216,7 +213,7 @@ def create(module, client, matching_zones):
     return changed, result
 
 
-def create_or_update_private(module, client, matching_zones, record):
+def create_or_update_private(matching_zones, record):
     for z in matching_zones:
         try:
             result = client.get_hosted_zone(Id=z['Id'])  # could be in different regions or have different VPCids
@@ -275,7 +272,7 @@ def create_or_update_private(module, client, matching_zones, record):
     return changed, record
 
 
-def create_or_update_public(module, client, matching_zones, record):
+def create_or_update_public(matching_zones, record):
     zone_details, zone_delegation_set_details = None, {}
     for matching_zone in matching_zones:
         try:
@@ -332,7 +329,7 @@ def create_or_update_public(module, client, matching_zones, record):
     return changed, record
 
 
-def delete_private(module, client, matching_zones, vpc_id, vpc_region):
+def delete_private(matching_zones, vpc_id, vpc_region):
     for z in matching_zones:
         try:
             result = client.get_hosted_zone(Id=z['Id'])
@@ -360,7 +357,7 @@ def delete_private(module, client, matching_zones, vpc_id, vpc_region):
     return False, "The vpc_id and the vpc_region do not match a private hosted zone."
 
 
-def delete_public(module, client, matching_zones):
+def delete_public(matching_zones):
     if len(matching_zones) > 1:
         changed = False
         msg = "There are multiple zones that match. Use hosted_zone_id to specify the correct zone."
@@ -375,7 +372,7 @@ def delete_public(module, client, matching_zones):
     return changed, msg
 
 
-def delete_hosted_id(module, client, hosted_zone_id, matching_zones):
+def delete_hosted_id(hosted_zone_id, matching_zones):
     if hosted_zone_id == "all":
         deleted = []
         for z in matching_zones:
@@ -401,7 +398,7 @@ def delete_hosted_id(module, client, hosted_zone_id, matching_zones):
     return changed, msg
 
 
-def delete(module, client, matching_zones):
+def delete(matching_zones):
     zone_in = module.params.get('zone').lower()
     vpc_id = module.params.get('vpc_id')
     vpc_region = module.params.get('vpc_region')
@@ -414,12 +411,12 @@ def delete(module, client, matching_zones):
 
     if zone_in in [z['Name'] for z in matching_zones]:
         if hosted_zone_id:
-            changed, result = delete_hosted_id(module, client, hosted_zone_id, matching_zones)
+            changed, result = delete_hosted_id(hosted_zone_id, matching_zones)
         else:
             if private_zone:
-                changed, result = delete_private(module, client, matching_zones, vpc_id, vpc_region)
+                changed, result = delete_private(matching_zones, vpc_id, vpc_region)
             else:
-                changed, result = delete_public(module, client, matching_zones)
+                changed, result = delete_public(matching_zones)
     else:
         changed = False
         result = "No zone to delete."
@@ -428,6 +425,9 @@ def delete(module, client, matching_zones):
 
 
 def main():
+    global module
+    global client
+
     argument_spec = dict(
         zone=dict(required=True),
         state=dict(default='present', choices=['present', 'absent']),
@@ -436,8 +436,8 @@ def main():
         comment=dict(default=''),
         hosted_zone_id=dict(),
         delegation_set_id=dict(),
-        tags=dict(type='dict'),
-        purge_tags=dict(type='bool', default=False),
+        tags=dict(type='dict', aliases=['resource_tags']),
+        purge_tags=dict(type='bool'),
     )
 
     mutually_exclusive = [
@@ -451,6 +451,14 @@ def main():
         supports_check_mode=True,
     )
 
+    if module.params.get('purge_tags') is None:
+        module.deprecate(
+            'The purge_tags parameter currently defaults to False.'
+            ' For consistency across the collection, this default value'
+            ' will change to True in release 5.0.0.',
+            version='5.0.0', collection_name='community.aws')
+        module.params['purge_tags'] = False
+
     zone_in = module.params.get('zone').lower()
     state = module.params.get('state').lower()
     vpc_id = module.params.get('vpc_id')
@@ -461,13 +469,13 @@ def main():
 
     private_zone = bool(vpc_id and vpc_region)
 
-    client = module.client('route53')
+    client = module.client('route53', retry_decorator=AWSRetry.jittered_backoff())
 
-    zones = find_zones(module, client, zone_in, private_zone)
+    zones = find_zones(zone_in, private_zone)
     if state == 'present':
-        changed, result = create(module, client, matching_zones=zones)
+        changed, result = create(matching_zones=zones)
     elif state == 'absent':
-        changed, result = delete(module, client, matching_zones=zones)
+        changed, result = delete(matching_zones=zones)
 
     if isinstance(result, dict):
         module.exit_json(changed=changed, result=result, **result)

@@ -12,6 +12,26 @@
           - not result.changed
       ignore_errors: yes
 
+    - name: Create a mariadb instance - check_mode
+      rds_instance:
+        id: "{{ instance_id }}"
+        state: present
+        engine: mariadb
+        username: "{{ username }}"
+        password: "{{ password }}"
+        db_instance_class: "{{ db_instance_class }}"
+        allocated_storage: "{{ allocated_storage }}"
+        deletion_protection: True
+        tags:
+          Name: "{{ instance_id }}"
+          Created_by: Ansible rds_instance tests
+      register: result
+      check_mode: yes
+
+    - assert:
+        that:
+          - result.changed
+
     - name: Create a mariadb instance
       rds_instance:
         id: "{{ instance_id }}"
@@ -21,6 +41,7 @@
         password: "{{ password }}"
         db_instance_class: "{{ db_instance_class }}"
         allocated_storage: "{{ allocated_storage }}"
+        deletion_protection: True
         tags:
           Name: "{{ instance_id }}"
           Created_by: Ansible rds_instance tests
@@ -33,9 +54,56 @@
           - "result.tags | length == 2"
           - "result.tags.Name == '{{ instance_id }}'"
           - "result.tags.Created_by == 'Ansible rds_instance tests'"
+          - result.deletion_protection == True
 
+    - name: Create a mariadb instance (idempotence) - check_mode
+      rds_instance:
+        id: "{{ instance_id }}"
+        state: present
+        engine: mariadb
+        username: "{{ username }}"
+        password: "{{ password }}"
+        db_instance_class: "{{ db_instance_class }}"
+        allocated_storage: "{{ allocated_storage }}"
+        deletion_protection: True
+        tags:
+          Name: "{{ instance_id }}"
+          Created_by: Ansible rds_instance tests
+      register: result
+      check_mode: yes
+
+    - assert:
+        that:
+          - not result.changed
+
+    - name: Create a mariadb instance (idempotence)
+      rds_instance:
+        id: "{{ instance_id }}"
+        state: present
+        engine: mariadb
+        username: "{{ username }}"
+        password: "{{ password }}"
+        db_instance_class: "{{ db_instance_class }}"
+        allocated_storage: "{{ allocated_storage }}"
+        deletion_protection: True
+        tags:
+          Name: "{{ instance_id }}"
+          Created_by: Ansible rds_instance tests
+      register: result
+
+    - assert:
+        that:
+          - not result.changed
+          - "result.db_instance_identifier == '{{ instance_id }}'"
+          - "result.tags | length == 2"
+          - "result.tags.Name == '{{ instance_id }}'"
+          - "result.tags.Created_by == 'Ansible rds_instance tests'"
+          - result.deletion_protection == True
+
+    # ------------------------------------------------------------------------------------------
     # Test stopping / rebooting instances
-    - name: Check mode - reboot a stopped instance
+
+    - name: Reboot a stopped instance - check_mode
       rds_instance:
         id: "{{ instance_id }}"
         state: rebooted
@@ -56,7 +124,9 @@
         that:
           - result.changed
 
-    - name: Check Mode - stop the instance
+    # ------------------------------------------------------------------------------------------
+
+    - name: Stop the instance - check_mode
       rds_instance:
         id: "{{ instance_id }}"
         state: stopped
@@ -77,7 +147,7 @@
         that:
           - result.changed
 
-    - name: Check Mode - idempotence
+    - name: Stop the instance (idempotence) - check_mode
       rds_instance:
         id: "{{ instance_id }}"
         state: stopped
@@ -88,7 +158,7 @@
         that:
           - not result.changed
 
-    - name: Idempotence
+    - name: Stop the instance (idempotence)
       rds_instance:
         id: "{{ instance_id }}"
         state: stopped
@@ -98,7 +168,9 @@
         that:
           - not result.changed
 
-    - name: Check Mode - start the instance
+    # ------------------------------------------------------------------------------------------
+
+    - name: Start the instance - check_mode
       rds_instance:
         id: "{{ instance_id }}"
         state: started
@@ -119,37 +191,118 @@
         that:
           - result.changed
 
-    # Test final snapshot on deletion
-    - name: Delete the DB instance
+    - name: Start the instance (idempotence) - check_mode
+      rds_instance:
+        id: "{{ instance_id }}"
+        state: started
+      register: result
+      check_mode: yes
+
+    - assert:
+        that:
+          - not result.changed
+
+    - name: Start the instance (idempotence)
+      rds_instance:
+        id: "{{ instance_id }}"
+        state: started
+      register: result
+
+    - assert:
+        that:
+          - not result.changed
+
+    # ------------------------------------------------------------------------------------------
+    # Test deletion protection / deletion
+
+    - name: Ensure instance exists prior to deleting
+      rds_instance_info:
+          db_instance_identifier: '{{ instance_id }}'
+      register: db_info
+
+    - assert:
+        that:
+          - db_info.instances | length == 1
+
+    - name: Attempt to delete DB instance with deletion protection (should fail)
       rds_instance:
         id: "{{ instance_id }}"
         state: absent
-        final_snapshot_identifier: "{{ instance_id }}"
+        skip_final_snapshot: True
+      register: result
+      ignore_errors: yes
+
+    - assert:
+        that:
+          - result.failed
+
+    - name: Turn off deletion protection
+      rds_instance:
+        id: "{{ instance_id }}"
+        deletion_protection: false
       register: result
 
     - assert:
         that:
           - result.changed
-          - "result.final_snapshot.db_instance_identifier == '{{ instance_id }}'"
+          - result.deletion_protection == False
 
-    - name: Check that snapshot exists
-      rds_snapshot_info:
-        db_snapshot_identifier: "{{ instance_id }}"
+    - name: Delete the instance - check_mode
+      rds_instance:
+        id: "{{ instance_id }}"
+        state: absent
+        skip_final_snapshot: True
+      register: result
+      check_mode: yes
+
+    - assert:
+        that:
+          - result.changed
+
+    - name: Delete the instance
+      rds_instance:
+        id: "{{ instance_id }}"
+        state: absent
+        skip_final_snapshot: True
       register: result
 
     - assert:
         that:
-          - "result.snapshots | length == 1"
-          - "result.snapshots.0.engine == 'mariadb'"
+          - result.changed
+
+    - name: Ensure instance was deleted
+      rds_instance_info:
+          db_instance_identifier: '{{ instance_id }}'
+      register: db_info
+
+    - assert:
+        that:
+          - db_info.instances | length == 0
+
+    - name: Delete the instance (idempotence) - check_mode
+      rds_instance:
+        id: "{{ instance_id }}"
+        state: absent
+        skip_final_snapshot: True
+      register: result
+      check_mode: yes
+
+    - assert:
+        that:
+          - not result.changed
+
+    - name: Delete the instance (idempotence)
+      rds_instance:
+        id: "{{ instance_id }}"
+        state: absent
+        skip_final_snapshot: True
+      register: result
+
+    - assert:
+        that:
+          - not result.changed
 
   always:
-    - name: remove snapshot
-      rds_instance_snapshot:
-        db_snapshot_identifier: "{{ resource_prefix }}-test-snapshot"
-        state: absent
-        wait: false
-      ignore_errors: yes
-
     - name: Remove DB instance
       rds_instance:
         id: "{{ instance_id }}"

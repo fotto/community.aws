@@ -10,8 +10,8 @@ DOCUMENTATION = '''
 author:
 - Pat Sharkey (@psharkey) <psharkey@cleo.com>
 - HanumanthaRao MVL (@hanumantharaomvl) <hanumanth@flux7.com>
-- Gaurav Ashtikar (@gau1991 )<gaurav.ashtikar@flux7.com>
-connection: aws_ssm
+- Gaurav Ashtikar (@gau1991) <gaurav.ashtikar@flux7.com>
+name: aws_ssm
 short_description: execute via AWS Systems Manager
 description:
 - This connection plugin allows ansible to execute tasks on an EC2 instance via the aws ssm CLI.
@@ -534,7 +534,12 @@ class Connection(ConnectionBase):
 
     def _get_url(self, client_method, bucket_name, out_path, http_method, profile_name, extra_args=None):
         ''' Generate URL for get_object / put_object '''
-        region_name = self.get_option('region') or 'us-east-1'
+
+        bucket_location = boto3.client('s3').get_bucket_location(
+            Bucket=(self.get_option('bucket_name')),
+        )
+        region_name = bucket_location['LocationConstraint']
+
         client = self._get_boto_client('s3', region_name=region_name, profile_name=profile_name)
         params = {'Bucket': bucket_name, 'Key': out_path}
         if extra_args is not None:

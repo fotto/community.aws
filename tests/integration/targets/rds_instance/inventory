@@ -1,15 +1,19 @@
+# inventory names shortened down to fit resource name length limits
 [tests]
+processor
+restore
+sgroups
+complex
 states
 modify
-modify_complex
-processor_features
-read_replica
-vpc_security_groups
-restore_instance
 tagging
+replica
+upgrade
+snapshot
+aurora
 
-# TODO: uncomment after adding rds_cluster module
-# aurora
+# TODO: uncomment after adding iam:CreatePolicy and iam:DeletePolicy
+# iam_roles
 
 
 [all:vars]

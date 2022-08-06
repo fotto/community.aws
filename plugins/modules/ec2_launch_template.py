@@ -11,17 +11,16 @@ module: ec2_launch_template
 version_added: 1.0.0
 short_description: Manage EC2 launch templates
 description:
-  - Create, modify, and delete EC2 Launch Templates, which can be used to
-    create individual instances or with Autoscaling Groups.
-  - The M(amazon.aws.ec2_instance) and M(community.aws.ec2_asg) modules can, instead of specifying all
-    parameters on those tasks, be passed a Launch Template which contains
-    settings like instance size, disk type, subnet, and more.
+- Create, modify, and delete EC2 Launch Templates, which can be used to
+  create individual instances or with Autoscaling Groups.
+- The M(amazon.aws.ec2_instance) and M(community.aws.autoscaling_group) modules can, instead of specifying all
+  parameters on those tasks, be passed a Launch Template which contains
+  settings like instance size, disk type, subnet, and more.
 extends_documentation_fragment:
 - amazon.aws.aws
 - amazon.aws.ec2
-
 author:
-  - Ryan Scott Brown (@ryansb)
+- Ryan Scott Brown (@ryansb)
 options:
   template_id:
     description:
@@ -31,6 +30,11 @@ options:
   template_name:
     description:
     - The template name. This must be unique in the region-account combination you are using.
+    - If no launch template exists with the specified name, a new launch template is created.
+    - If a launch template with the specified name already exists and the configuration has not changed,
+      nothing happens.
+    - If a launch template with the specified name already exists and the configuration has changed,
+      a new version of the launch template is created.
     aliases: [name]
     type: str
   default_version:
@@ -309,12 +313,21 @@ options:
       For any VPC other than Default, you must use I(security_group_ids).
     type: list
     elements: str
+  source_version:
+    description: >
+      The version number of the launch template version on which to base the new version.
+      The new version inherits the same launch parameters as the source version, except for parameters that you explicity specify.
+      Snapshots applied to the block device mapping are ignored when creating a new version unless they are explicitly included.
+    type: str
+    default: latest
+    version_added: 4.1.0
   tags:
     type: dict
     description:
     - A set of key-value pairs to be applied to resources when this Launch Template is used.
     - "Tag key constraints: Tag keys are case-sensitive and accept a maximum of 127 Unicode characters. May not begin with I(aws:)"
     - "Tag value constraints: Tag values are case-sensitive and accept a maximum of 255 Unicode characters."
+    aliases: ['resource_tags']
   user_data:
     description: >
       The Base64-encoded user data to make available to the instance. For more information, see the Linux
@@ -348,6 +361,22 @@ options:
           The state of token usage for your instance metadata requests.
         choices: [optional, required]
         default: 'optional'
+      http_protocol_ipv6:
+        version_added: 3.1.0
+        type: str
+        description: >
+          - Wether the instance metadata endpoint is available via IPv6 (C(enabled)) or not (C(disabled)).
+          - Requires botocore >= 1.21.29
+        choices: [enabled, disabled]
+        default: 'disabled'
+      instance_metadata_tags:
+        version_added: 3.1.0
+        type: str
+        description:
+          - Wether the instance tags are availble (C(enabled)) via metadata endpoint or not (C(disabled)).
+          - Requires botocore >= 1.23.30
+        choices: [enabled, disabled]
+        default: 'disabled'
 '''
 
 EXAMPLES = '''
@@ -511,6 +540,24 @@ def create_or_update(module, template_options):
     out = {}
     lt_data = params_to_launch_data(module, dict((k, v) for k, v in module.params.items() if k in template_options))
     lt_data = scrub_none_parameters(lt_data, descend_into_lists=True)
+
+    if lt_data.get('MetadataOptions'):
+        if not module.botocore_at_least('1.23.30'):
+            # fail only if enabled is requested
+            if lt_data['MetadataOptions'].get('InstanceMetadataTags') == 'enabled':
+                module.require_botocore_at_least('1.23.30', reason='to set instance_metadata_tags')
+            # pop if it's not requested to keep backwards compatibility.
+            # otherwise the modules failes because parameters are set due default values
+            lt_data['MetadataOptions'].pop('InstanceMetadataTags')
+
+        if not module.botocore_at_least('1.21.29'):
+            # fail only if enabled is requested
+            if lt_data['MetadataOptions'].get('HttpProtocolIpv6') == 'enabled':
+                module.require_botocore_at_least('1.21.29', reason='to set http_protocol_ipv6')
+            # pop if it's not requested to keep backwards compatibility.
+            # otherwise the modules failes because parameters are set due default values
+            lt_data['MetadataOptions'].pop('HttpProtocolIpv6')
+
     if not (template or template_versions):
         # create a full new one
         try:
@@ -530,12 +577,38 @@ def create_or_update(module, template_options):
             out['changed'] = False
             return out
         try:
-            resp = ec2.create_launch_template_version(
-                LaunchTemplateId=template['LaunchTemplateId'],
-                LaunchTemplateData=lt_data,
-                ClientToken=uuid4().hex,
-                aws_retry=True,
-            )
+            if module.params.get('source_version') in (None, ''):
+                resp = ec2.create_launch_template_version(
+                    LaunchTemplateId=template['LaunchTemplateId'],
+                    LaunchTemplateData=lt_data,
+                    ClientToken=uuid4().hex,
+                    aws_retry=True,
+                )
+            elif module.params.get('source_version') == 'latest':
+                resp = ec2.create_launch_template_version(
+                    LaunchTemplateId=template['LaunchTemplateId'],
+                    LaunchTemplateData=lt_data,
+                    ClientToken=uuid4().hex,
+                    SourceVersion=str(most_recent['VersionNumber']),
+                    aws_retry=True,
+                )
+            else:
+                try:
+                    int(module.params.get('source_version'))
+                except ValueError:
+                    module.fail_json(msg='source_version param was not a valid integer, got "{0}"'.format(module.params.get('source_version')))
+                # get source template version
+                source_version = next((v for v in template_versions if v['VersionNumber'] == int(module.params.get('source_version'))), None)
+                if source_version is None:
+                    module.fail_json(msg='source_version does not exist, got "{0}"'.format(module.params.get('source_version')))
+                resp = ec2.create_launch_template_version(
+                    LaunchTemplateId=template['LaunchTemplateId'],
+                    LaunchTemplateData=lt_data,
+                    ClientToken=uuid4().hex,
+                    SourceVersion=str(source_version['VersionNumber']),
+                    aws_retry=True,
+                )
+
             if module.params.get('default_version') in (None, ''):
                 # no need to do anything, leave the existing version as default
                 pass
@@ -666,7 +739,9 @@ def main():
             options=dict(
                 http_endpoint=dict(choices=['enabled', 'disabled'], default='enabled'),
                 http_put_response_hop_limit=dict(type='int', default=1),
-                http_tokens=dict(choices=['optional', 'required'], default='optional')
+                http_tokens=dict(choices=['optional', 'required'], default='optional'),
+                http_protocol_ipv6=dict(choices=['disabled', 'enabled'], default='disabled'),
+                instance_metadata_tags=dict(choices=['disabled', 'enabled'], default='disabled'),
             )
         ),
         network_interfaces=dict(
@@ -698,7 +773,7 @@ def main():
         ram_disk_id=dict(),
         security_group_ids=dict(type='list', elements='str'),
         security_groups=dict(type='list', elements='str'),
-        tags=dict(type='dict'),
+        tags=dict(type='dict', aliases=['resource_tags']),
         user_data=dict(),
     )
 
@@ -707,6 +782,7 @@ def main():
         template_name=dict(aliases=['name']),
         template_id=dict(aliases=['id']),
         default_version=dict(default='latest'),
+        source_version=dict(default='latest')
     )
 
     arg_spec.update(template_options)

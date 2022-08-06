@@ -23,16 +23,30 @@ options:
       - Name of the S3 bucket.
     required: true
     type: str
+  abort_incomplete_multipart_upload_days:
+    description:
+      - Specifies the days since the initiation of an incomplete multipart upload that Amazon S3 will wait before permanently removing all parts of the upload.
+    type: int
+    version_added: 2.2.0
   expiration_date:
     description:
       - Indicates the lifetime of the objects that are subject to the rule by the date they will expire.
       - The value must be ISO-8601 format, the time must be midnight and a GMT timezone must be specified.
+      - This cannot be specified with I(expire_object_delete_marker)
     type: str
   expiration_days:
     description:
       - Indicates the lifetime, in days, of the objects that are subject to the rule.
       - The value must be a non-zero positive integer.
+      - This cannot be specified with I(expire_object_delete_marker)
     type: int
+  expire_object_delete_marker:
+    description:
+      - Indicates whether Amazon S3 will remove a delete marker with no noncurrent versions.
+      - If set to C(true), the delete marker will be expired; if set to C(false) the policy takes no action.
+      - This cannot be specified with I(expiration_days) or I(expiration_date).
+    type: bool
+    version_added: 2.2.0
   prefix:
     description:
       - Prefix identifying one or more objects to which the rule applies.
@@ -119,10 +133,6 @@ options:
           I(storage_class)
     type: list
     elements: dict
-  requester_pays:
-    description:
-      - The I(requester_pays) option does nothing and will be removed after 2022-06-01
-    type: bool
   wait:
     description:
       - Wait for the configuration to complete before returning.
@@ -250,8 +260,10 @@ def fetch_rules(client, module, name):
 
 def build_rule(client, module):
     name = module.params.get("name")
+    abort_incomplete_multipart_upload_days = module.params.get("abort_incomplete_multipart_upload_days")
     expiration_date = parse_date(module.params.get("expiration_date"))
     expiration_days = module.params.get("expiration_days")
+    expire_object_delete_marker = module.params.get("expire_object_delete_marker")
     noncurrent_version_expiration_days = module.params.get("noncurrent_version_expiration_days")
     noncurrent_version_transition_days = module.params.get("noncurrent_version_transition_days")
     noncurrent_version_transitions = module.params.get("noncurrent_version_transitions")
@@ -268,11 +280,19 @@ def build_rule(client, module):
     rule = dict(Filter=dict(Prefix=prefix), Status=status.title())
     if rule_id is not None:
         rule['ID'] = rule_id
+
+    if abort_incomplete_multipart_upload_days:
+        rule['AbortIncompleteMultipartUpload'] = {
+            'DaysAfterInitiation': abort_incomplete_multipart_upload_days
+        }
+
     # Create expiration
     if expiration_days is not None:
         rule['Expiration'] = dict(Days=expiration_days)
     elif expiration_date is not None:
         rule['Expiration'] = dict(Date=expiration_date.isoformat())
+    elif expire_object_delete_marker is not None:
+        rule['Expiration'] = dict(ExpiredObjectDeleteMarker=expire_object_delete_marker)
 
     if noncurrent_version_expiration_days is not None:
         rule['NoncurrentVersionExpiration'] = dict(NoncurrentDays=noncurrent_version_expiration_days)
@@ -290,7 +310,7 @@ def build_rule(client, module):
             t_out = dict()
             if transition.get('transition_date'):
                 t_out['Date'] = transition['transition_date']
-            elif transition.get('transition_days'):
+            elif transition.get('transition_days') is not None:
                 t_out['Days'] = transition['transition_days']
             if transition.get('storage_class'):
                 t_out['StorageClass'] = transition['storage_class'].upper()
@@ -461,15 +481,23 @@ def create_lifecycle_rule(client, module):
 
     _changed = changed
     _retries = 10
-    while wait and _changed and _retries:
+    _not_changed_cnt = 6
+    while wait and _changed and _retries and _not_changed_cnt:
         # We've seen examples where get_bucket_lifecycle_configuration returns
-        # the updated rules, then the old rules, then the updated rules again,
+        # the updated rules, then the old rules, then the updated rules again and
+        # again couple of times.
+        # Thus try to read the rule few times in a row to check if it has changed.
         time.sleep(5)
         _retries -= 1
         new_rules = fetch_rules(client, module, name)
         (_changed, lifecycle_configuration) = compare_and_update_configuration(client, module,
                                                                                new_rules,
                                                                                new_rule)
+        if not _changed:
+            _not_changed_cnt -= 1
+            _changed = True
+        else:
+            _not_changed_cnt = 6
 
     new_rules = fetch_rules(client, module, name)
 
@@ -507,13 +535,21 @@ def destroy_lifecycle_rule(client, module):
 
     _changed = changed
     _retries = 10
-    while wait and _changed and _retries:
+    _not_changed_cnt = 6
+    while wait and _changed and _retries and _not_changed_cnt:
         # We've seen examples where get_bucket_lifecycle_configuration returns
-        # the updated rules, then the old rules, then the updated rules again,
+        # the updated rules, then the old rules, then the updated rules again and
+        # again couple of times.
+        # Thus try to read the rule few times in a row to check if it has changed.
         time.sleep(5)
         _retries -= 1
         new_rules = fetch_rules(client, module, name)
         (_changed, lifecycle_configuration) = compare_and_remove_rule(new_rules, rule_id, prefix)
+        if not _changed:
+            _not_changed_cnt -= 1
+            _changed = True
+        else:
+            _not_changed_cnt = 6
 
     new_rules = fetch_rules(client, module, name)
 
@@ -525,14 +561,15 @@ def main():
     s3_storage_class = ['glacier', 'onezone_ia', 'standard_ia', 'intelligent_tiering', 'deep_archive']
     argument_spec = dict(
         name=dict(required=True, type='str'),
+        abort_incomplete_multipart_upload_days=dict(type='int'),
         expiration_days=dict(type='int'),
         expiration_date=dict(),
+        expire_object_delete_marker=dict(type='bool'),
         noncurrent_version_expiration_days=dict(type='int'),
         noncurrent_version_storage_class=dict(default='glacier', type='str', choices=s3_storage_class),
         noncurrent_version_transition_days=dict(type='int'),
         noncurrent_version_transitions=dict(type='list', elements='dict'),
         prefix=dict(),
-        requester_pays=dict(type='bool', removed_at_date='2022-06-01', removed_from_collection='community.aws'),
         rule_id=dict(),
         state=dict(default='present', choices=['present', 'absent']),
         status=dict(default='enabled', choices=['enabled', 'disabled']),
@@ -546,7 +583,7 @@ def main():
 
     module = AnsibleAWSModule(argument_spec=argument_spec,
                               mutually_exclusive=[
-                                  ['expiration_days', 'expiration_date'],
+                                  ['expiration_days', 'expiration_date', 'expire_object_delete_marker'],
                                   ['expiration_days', 'transition_date'],
                                   ['transition_days', 'transition_date'],
                                   ['transition_days', 'expiration_date'],
@@ -563,12 +600,14 @@ def main():
 
     if state == 'present' and module.params["status"] == "enabled":  # allow deleting/disabling a rule by id/prefix
 
-        required_when_present = ('expiration_date', 'expiration_days', 'transition_date',
-                                 'transition_days', 'transitions', 'noncurrent_version_expiration_days',
+        required_when_present = ('abort_incomplete_multipart_upload_days',
+                                 'expiration_date', 'expiration_days', 'expire_object_delete_marker',
+                                 'transition_date', 'transition_days', 'transitions',
+                                 'noncurrent_version_expiration_days',
                                  'noncurrent_version_transition_days',
                                  'noncurrent_version_transitions')
         for param in required_when_present:
-            if module.params.get(param):
+            if module.params.get(param) is None:
                 break
         else:
             msg = "one of the following is required when 'state' is 'present': %s" % ', '.join(required_when_present)

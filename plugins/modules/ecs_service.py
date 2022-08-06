@@ -5,23 +5,22 @@
 from __future__ import (absolute_import, division, print_function)
 __metaclass__ = type
 
-
 DOCUMENTATION = r'''
 ---
 module: ecs_service
 version_added: 1.0.0
 short_description: Create, terminate, start or stop a service in ECS
 description:
-  - Creates or terminates ECS. services.
+  - Creates or terminates ECS services.
 notes:
   - The service role specified must be assumable. (i.e. have a trust relationship for the ecs service, ecs.amazonaws.com)
   - For details of the parameters and returns see U(https://boto3.readthedocs.io/en/latest/reference/services/ecs.html).
   - An IAM role must have been previously created.
 author:
-    - "Mark Chance (@Java1Guy)"
-    - "Darek Kaczynski (@kaczynskid)"
-    - "Stephane Maarek (@simplesteph)"
-    - "Zac Blazic (@zacblazic)"
+  - "Mark Chance (@Java1Guy)"
+  - "Darek Kaczynski (@kaczynskid)"
+  - "Stephane Maarek (@simplesteph)"
+  - "Zac Blazic (@zacblazic)"
 options:
     state:
         description:
@@ -34,20 +33,27 @@ options:
           - The name of the service.
         required: true
         type: str
+        aliases: ['service']
     cluster:
         description:
           - The name of the cluster in which the service exists.
+          - If not specified, the cluster name will be C(default).
         required: false
         type: str
+        default: 'default'
     task_definition:
         description:
           - The task definition the service will run.
           - This parameter is required when I(state=present).
+          - This parameter is ignored when updating a service with a C(CODE_DEPLOY) deployment controller in which case
+            the task definition is managed by Code Pipeline and cannot be updated.
         required: false
         type: str
     load_balancers:
         description:
           - The list of ELBs defined for this service.
+          - Load balancers for an existing service cannot be updated, and it is an error to do so.
+          - When the deployment controller is CODE_DEPLOY changes to this value are simply ignored, and do not cause an error.
         required: false
         type: list
         elements: dict
@@ -87,6 +93,17 @@ options:
         required: false
         type: bool
         default: false
+    deployment_controller:
+        description:
+          - The deployment controller to use for the service. If no deploymenet controller is specified, the ECS controller is used.
+        required: false
+        version_added: 4.1.0
+        type: dict
+        suboptions:
+          type:
+            type: str
+            choices: ["ECS", "CODE_DEPLOY", "EXTERNAL"]
+            description: The deployment controller type to use.
     deployment_configuration:
         description:
           - Optional parameters that control the deployment_configuration.
@@ -100,6 +117,16 @@ options:
           minimum_healthy_percent:
             type: int
             description: A lower limit on the number of tasks in a service that must remain in the RUNNING state during a deployment.
+          deployment_circuit_breaker:
+            type: dict
+            description: The deployment circuit breaker determines whether a service deployment will fail if the service can't reach a steady state.
+            suboptions:
+              enable:
+                type: bool
+                description: If enabled, a service deployment will transition to a failed state and stop launching new tasks.
+              rollback:
+                type: bool
+                description: If enabled, ECS will roll back your service to the last completed deployment after a failure.
     placement_constraints:
         description:
           - The placement constraints for the tasks in the service.
@@ -113,6 +140,7 @@ options:
             type: str
           expression:
             description: A cluster query language expression to apply to the constraint.
+            required: false
             type: str
     placement_strategy:
         description:
@@ -158,6 +186,26 @@ options:
         required: false
         choices: ["EC2", "FARGATE"]
         type: str
+    capacity_provider_strategy:
+        version_added: 4.0.0
+        description:
+          - The capacity provider strategy to use with your service. You can specify a maximum of 6 providers per strategy.
+        required: false
+        type: list
+        elements: dict
+        suboptions:
+            capacity_provider:
+                description:
+                  - Name of capacity provider.
+                type: str
+            weight:
+                description:
+                  - The relative percentage of the total number of launched tasks that should use the specified provider.
+                type: int
+            base:
+                description:
+                  - How many tasks, at a minimum, should use the specified provider.
+                type: int
     platform_version:
         type: str
         description:
@@ -196,15 +244,33 @@ options:
         required: false
         choices: ["DAEMON", "REPLICA"]
         type: str
+    wait:
+        description:
+          - Whether or not to wait for the service to be inactive.
+          - Waits only when I(state) is C(absent).
+        type: bool
+        default: false
+        version_added: 4.1.0
+    propagate_tags:
+        description:
+          - Propagate tags from ECS task defintition or ECS service to ECS task.
+        required: false
+        choices: ["TASK_DEFINITION", "SERVICE"]
+        type: str
+        version_added: 4.1.0
+    tags:
+        description:
+          - A dictionary of tags to add or remove from the resource.
+        type: dict
+        required: false
+        version_added: 4.1.0
 extends_documentation_fragment:
-- amazon.aws.aws
-- amazon.aws.ec2
-
+  - amazon.aws.aws
+  - amazon.aws.ec2
 '''
 
 EXAMPLES = r'''
 # Note: These examples do not set authentication details, see the AWS Guide for details.
-
 # Basic provisioning example
 - community.aws.ecs_service:
     state: present
@@ -249,6 +315,42 @@ EXAMPLES = r'''
     placement_strategy:
       - type: binpack
         field: memory
+
+# With deployment circuit breaker (added in version 4.0)
+- community.aws.ecs_service:
+    state: present
+    name: test-service
+    cluster: test-cluster
+    task_definition: test-task-definition
+    desired_count: 3
+    deployment_configuration:
+      deployment_circuit_breaker:
+        enable: True
+        rollback: True
+
+# With capacity_provider_strategy (added in version 4.0)
+- community.aws.ecs_service:
+    state: present
+    name: test-service
+    cluster: test-cluster
+    task_definition: test-task-definition
+    desired_count: 1
+    capacity_provider_strategy:
+      - capacity_provider: test-capacity-provider-1
+        weight: 1
+        base: 0
+
+# With tags and tag propagation
+- community.aws.ecs_service:
+    state: present
+    name: tags-test-service
+    cluster: new_cluster
+    task_definition: 'new_cluster-task:1'
+    desired_count: 1
+    tags:
+      Firstname: jane
+      lastName: doe
+    propagate_tags: SERVICE
 '''
 
 RETURN = r'''
@@ -257,6 +359,24 @@ service:
     returned: when creating a service
     type: complex
     contains:
+        capacityProviderStrategy:
+            version_added: 4.0.0
+            description: The capacity provider strategy to use with your service.
+            returned: always
+            type: complex
+            contains:
+                base:
+                    description: How many tasks, at a minimum, should use the specified provider.
+                    returned: always
+                    type: int
+                capacityProvider:
+                    description: Name of capacity provider.
+                    returned: always
+                    type: str
+                weight:
+                    description: The relative percentage of the total number of launched tasks that should use the specified provider.
+                    returned: always
+                    type: int
         clusterArn:
             description: The Amazon Resource Name (ARN) of the of the cluster that hosts the service.
             returned: always
@@ -304,6 +424,10 @@ service:
             description: The valid values are ACTIVE, DRAINING, or INACTIVE.
             returned: always
             type: str
+        tags:
+            description: The tags applied to this resource.
+            returned: success
+            type: dict
         taskDefinition:
             description: The ARN of a task definition to use for tasks in the service.
             returned: always
@@ -326,6 +450,19 @@ service:
                     description: minimumHealthyPercent param
                     returned: always
                     type: int
+                deploymentCircuitBreaker:
+                    description: dictionary of deploymentCircuitBreaker
+                    returned: always
+                    type: complex
+                    contains:
+                        enable:
+                            description: The state of the circuit breaker feature.
+                            returned: always
+                            type: bool
+                        rollback:
+                            description: The state of the rollback feature of the circuit breaker.
+                            returned: always
+                            type: bool
         events:
             description: list of service events
             returned: always
@@ -362,7 +499,10 @@ service:
                                  such as attribute:ecs.availability-zone. For the binpack placement strategy, valid values are CPU and MEMORY.
                     returned: always
                     type: str
-
+        propagateTags:
+            description: The type of tag propagation applied to the resource.
+            returned: always
+            type: str
 ansible_facts:
     description: Facts about deleted service.
     returned: when deleting a service
@@ -420,6 +560,11 @@ ansible_facts:
                     description: The valid values are ACTIVE, DRAINING, or INACTIVE.
                     returned: always
                     type: str
+                tags:
+                    description: The tags applied to this resource.
+                    returned: when tags found
+                    type: list
+                    elements: dict
                 taskDefinition:
                     description: The ARN of a task definition to use for tasks in the service.
                     returned: always
@@ -442,6 +587,19 @@ ansible_facts:
                             description: minimumHealthyPercent param
                             returned: always
                             type: int
+                        deploymentCircuitBreaker:
+                            description: dictionary of deploymentCircuitBreaker
+                            returned: always
+                            type: complex
+                            contains:
+                                enable:
+                                    description: The state of the circuit breaker feature.
+                                    returned: always
+                                    type: bool
+                                rollback:
+                                    description: The state of the rollback feature of the circuit breaker.
+                                    returned: always
+                                    type: bool
                 events:
                     description: list of service events
                     returned: always
@@ -478,16 +636,31 @@ ansible_facts:
                                          such as attribute:ecs.availability-zone. For the binpack placement strategy, valid values are CPU and MEMORY.
                             returned: always
                             type: str
+                propagateTags:
+                    description: The type of tag propagation applied to the resource
+                    returned: always
+                    type: str
+
 '''
 import time
 
-DEPLOYMENT_CONFIGURATION_TYPE_MAP = {
-    'maximum_percent': 'int',
-    'minimum_healthy_percent': 'int'
+DEPLOYMENT_CONTROLLER_TYPE_MAP = {
+    'type': 'str',
 }
 
+DEPLOYMENT_CONFIGURATION_TYPE_MAP = {
+    'maximum_percent': 'int',
+    'minimum_healthy_percent': 'int',
+    'deployment_circuit_breaker': 'dict',
+}
+
+from ansible.module_utils.common.dict_transformations import snake_dict_to_camel_dict
+
 from ansible_collections.amazon.aws.plugins.module_utils.core import AnsibleAWSModule
-from ansible_collections.amazon.aws.plugins.module_utils.ec2 import snake_dict_to_camel_dict, map_complex_type, get_ec2_security_group_ids_from_names
+from ansible_collections.amazon.aws.plugins.module_utils.ec2 import map_complex_type
+from ansible_collections.amazon.aws.plugins.module_utils.ec2 import get_ec2_security_group_ids_from_names
+from ansible_collections.amazon.aws.plugins.module_utils.ec2 import ansible_dict_to_boto3_tag_list
+from ansible_collections.amazon.aws.plugins.module_utils.ec2 import boto3_tag_list_to_ansible_dict
 
 try:
     import botocore
@@ -534,8 +707,11 @@ class EcsServiceManager:
     def describe_service(self, cluster_name, service_name):
         response = self.ecs.describe_services(
             cluster=cluster_name,
-            services=[service_name])
+            services=[service_name],
+            include=['TAGS'],
+        )
         msg = ''
+
         if len(response['failures']) > 0:
             c = self.find_in_array(response['failures'], service_name, 'arn')
             msg += ", failure reason is " + c['reason']
@@ -549,10 +725,25 @@ class EcsServiceManager:
         raise Exception("Unknown problem describing service %s." % service_name)
 
     def is_matching_service(self, expected, existing):
-        if expected['task_definition'] != existing['taskDefinition']:
-            return False
+        # aws returns the arn of the task definition
+        #   arn:aws:ecs:eu-central-1:123456789:task-definition/ansible-fargate-nginx:3
+        # but the user is just entering
+        #   ansible-fargate-nginx:3
+        if expected['task_definition'] != existing['taskDefinition'].split('/')[-1]:
+            if existing['deploymentController']['type'] != 'CODE_DEPLOY':
+                return False
+
+        if expected.get('health_check_grace_period_seconds'):
+            if expected.get('health_check_grace_period_seconds') != existing.get('healthCheckGracePeriodSeconds'):
+                return False
 
         if (expected['load_balancers'] or []) != existing['loadBalancers']:
+            return False
+
+        if expected['propagate_tags'] != existing['propagateTags']:
+            return False
+
+        if boto3_tag_list_to_ansible_dict(existing['tags']) != expected['tags']:
             return False
 
         # expected is params. DAEMON scheduling strategy returns desired count equal to
@@ -564,10 +755,10 @@ class EcsServiceManager:
         return True
 
     def create_service(self, service_name, cluster_name, task_definition, load_balancers,
-                       desired_count, client_token, role, deployment_configuration,
+                       desired_count, client_token, role, deployment_controller, deployment_configuration,
                        placement_constraints, placement_strategy, health_check_grace_period_seconds,
                        network_configuration, service_registries, launch_type, platform_version,
-                       scheduling_strategy):
+                       scheduling_strategy, capacity_provider_strategy, tags, propagate_tags):
 
         params = dict(
             cluster=cluster_name,
@@ -577,11 +768,12 @@ class EcsServiceManager:
             clientToken=client_token,
             role=role,
             deploymentConfiguration=deployment_configuration,
-            placementConstraints=placement_constraints,
             placementStrategy=placement_strategy
         )
         if network_configuration:
             params['networkConfiguration'] = network_configuration
+        if deployment_controller:
+            params['deploymentController'] = deployment_controller
         if launch_type:
             params['launchType'] = launch_type
         if platform_version:
@@ -590,9 +782,25 @@ class EcsServiceManager:
             params['healthCheckGracePeriodSeconds'] = health_check_grace_period_seconds
         if service_registries:
             params['serviceRegistries'] = service_registries
+
+        # filter placement_constraint and left only those where value is not None
+        # use-case: `distinctInstance` type should never contain `expression`, but None will fail `str` type validation
+        if placement_constraints:
+            params['placementConstraints'] = [{key: value for key, value in constraint.items() if value is not None}
+                                              for constraint in placement_constraints]
+
         # desired count is not required if scheduling strategy is daemon
         if desired_count is not None:
             params['desiredCount'] = desired_count
+        if capacity_provider_strategy:
+            params['capacityProviderStrategy'] = capacity_provider_strategy
+        if propagate_tags:
+            params['propagateTags'] = propagate_tags
+        # desired count is not required if scheduling strategy is daemon
+        if desired_count is not None:
+            params['desiredCount'] = desired_count
+        if tags:
+            params['tags'] = ansible_dict_to_boto3_tag_list(tags, 'key', 'value')
 
         if scheduling_strategy:
             params['schedulingStrategy'] = scheduling_strategy
@@ -601,7 +809,7 @@ class EcsServiceManager:
 
     def update_service(self, service_name, cluster_name, task_definition,
                        desired_count, deployment_configuration, network_configuration,
-                       health_check_grace_period_seconds, force_new_deployment):
+                       health_check_grace_period_seconds, force_new_deployment, capacity_provider_strategy):
         params = dict(
             cluster=cluster_name,
             service=service_name,
@@ -611,6 +819,8 @@ class EcsServiceManager:
             params['networkConfiguration'] = network_configuration
         if force_new_deployment:
             params['forceNewDeployment'] = force_new_deployment
+        if capacity_provider_strategy:
+            params['capacityProviderStrategy'] = capacity_provider_strategy
         if health_check_grace_period_seconds is not None:
             params['healthCheckGracePeriodSeconds'] = health_check_grace_period_seconds
         # desired count is not required if scheduling strategy is daemon
@@ -648,8 +858,8 @@ class EcsServiceManager:
 def main():
     argument_spec = dict(
         state=dict(required=True, choices=['present', 'absent', 'deleting']),
-        name=dict(required=True, type='str'),
-        cluster=dict(required=False, type='str'),
+        name=dict(required=True, type='str', aliases=['service']),
+        cluster=dict(required=False, type='str', default='default'),
         task_definition=dict(required=False, type='str'),
         load_balancers=dict(required=False, default=[], type='list', elements='dict'),
         desired_count=dict(required=False, type='int'),
@@ -659,7 +869,9 @@ def main():
         repeat=dict(required=False, type='int', default=10),
         force_new_deployment=dict(required=False, default=False, type='bool'),
         force_deletion=dict(required=False, default=False, type='bool'),
+        deployment_controller=dict(required=False, default={}, type='dict'),
         deployment_configuration=dict(required=False, default={}, type='dict'),
+        wait=dict(required=False, default=False, type='bool'),
         placement_constraints=dict(
             required=False,
             default=[],
@@ -667,7 +879,7 @@ def main():
             elements='dict',
             options=dict(
                 type=dict(type='str'),
-                expression=dict(type='str')
+                expression=dict(required=False, type='str')
             )
         ),
         placement_strategy=dict(
@@ -689,18 +901,35 @@ def main():
         launch_type=dict(required=False, choices=['EC2', 'FARGATE']),
         platform_version=dict(required=False, type='str'),
         service_registries=dict(required=False, type='list', default=[], elements='dict'),
-        scheduling_strategy=dict(required=False, choices=['DAEMON', 'REPLICA'])
+        scheduling_strategy=dict(required=False, choices=['DAEMON', 'REPLICA']),
+        capacity_provider_strategy=dict(
+            required=False,
+            type='list',
+            default=[],
+            elements='dict',
+            options=dict(
+                capacity_provider=dict(type='str'),
+                weight=dict(type='int'),
+                base=dict(type='int')
+            )
+        ),
+        propagate_tags=dict(required=False, choices=['TASK_DEFINITION', 'SERVICE']),
+        tags=dict(required=False, type='dict'),
     )
 
     module = AnsibleAWSModule(argument_spec=argument_spec,
                               supports_check_mode=True,
                               required_if=[('state', 'present', ['task_definition']),
                                            ('launch_type', 'FARGATE', ['network_configuration'])],
-                              required_together=[['load_balancers', 'role']])
+                              required_together=[['load_balancers', 'role']],
+                              mutually_exclusive=[['launch_type', 'capacity_provider_strategy']])
 
     if module.params['state'] == 'present' and module.params['scheduling_strategy'] == 'REPLICA':
         if module.params['desired_count'] is None:
             module.fail_json(msg='state is present, scheduling_strategy is REPLICA; missing desired_count')
+
+    if len(module.params['capacity_provider_strategy']) > 6:
+        module.fail_json(msg='AWS allows a maximum of six capacity providers in the strategy.')
 
     service_mgr = EcsServiceManager(module)
     if module.params['network_configuration']:
@@ -708,16 +937,24 @@ def main():
     else:
         network_configuration = None
 
+    deployment_controller = map_complex_type(module.params['deployment_controller'],
+                                             DEPLOYMENT_CONTROLLER_TYPE_MAP)
+
+    deploymentController = snake_dict_to_camel_dict(deployment_controller)
+
     deployment_configuration = map_complex_type(module.params['deployment_configuration'],
                                                 DEPLOYMENT_CONFIGURATION_TYPE_MAP)
 
     deploymentConfiguration = snake_dict_to_camel_dict(deployment_configuration)
     serviceRegistries = list(map(snake_dict_to_camel_dict, module.params['service_registries']))
+    capacityProviders = list(map(snake_dict_to_camel_dict, module.params['capacity_provider_strategy']))
 
     try:
         existing = service_mgr.describe_service(module.params['cluster'], module.params['name'])
     except Exception as e:
-        module.fail_json(msg="Exception describing service '" + module.params['name'] + "' in cluster '" + module.params['cluster'] + "': " + str(e))
+        module.fail_json_aws(e,
+                             msg="Exception describing service '{0}' in cluster '{1}'"
+                             .format(module.params['name'], module.params['cluster']))
 
     results = dict(changed=False)
 
@@ -752,7 +989,7 @@ def main():
                         loadBalancer['containerPort'] = int(loadBalancer['containerPort'])
 
                 if update:
-                    # check various parameters and boto versions and give a helpful error in boto is not new enough for feature
+                    # check various parameters and AWS SDK versions and give a helpful error if the SDK is not new enough for feature
 
                     if module.params['scheduling_strategy']:
                         if (existing['schedulingStrategy']) != module.params['scheduling_strategy']:
@@ -761,19 +998,39 @@ def main():
                     if module.params['service_registries']:
                         if (existing['serviceRegistries'] or []) != serviceRegistries:
                             module.fail_json(msg="It is not possible to update the service registries of an existing service")
-
+                    if module.params['capacity_provider_strategy']:
+                        if 'launchType' in existing.keys():
+                            module.fail_json(msg="It is not possible to change an existing service from launch_type to capacity_provider_strategy.")
+                    if module.params['launch_type']:
+                        if 'capacityProviderStrategy' in existing.keys():
+                            module.fail_json(msg="It is not possible to change an existing service from capacity_provider_strategy to launch_type.")
                     if (existing['loadBalancers'] or []) != loadBalancers:
-                        module.fail_json(msg="It is not possible to update the load balancers of an existing service")
+                        if existing['deploymentController']['type'] != 'CODE_DEPLOY':
+                            module.fail_json(msg="It is not possible to update the load balancers of an existing service")
+
+                    if existing.get('deploymentController', {}).get('type', None) == 'CODE_DEPLOY':
+                        task_definition = ''
+                        network_configuration = []
+                    else:
+                        task_definition = module.params['task_definition']
+
+                    if module.params['propagate_tags'] and module.params['propagate_tags'] != existing['propagateTags']:
+                        module.fail_json(msg="It is not currently supported to enable propagation tags of an existing service")
+
+                    if module.params['tags'] and boto3_tag_list_to_ansible_dict(existing['tags']) != module.params['tags']:
+                        module.fail_json(msg="It is not currently supported to change tags of an existing service")
 
                     # update required
                     response = service_mgr.update_service(module.params['name'],
                                                           module.params['cluster'],
-                                                          module.params['task_definition'],
+                                                          task_definition,
                                                           module.params['desired_count'],
                                                           deploymentConfiguration,
                                                           network_configuration,
                                                           module.params['health_check_grace_period_seconds'],
-                                                          module.params['force_new_deployment'])
+                                                          module.params['force_new_deployment'],
+                                                          capacityProviders,
+                                                          )
 
                 else:
                     try:
@@ -784,6 +1041,7 @@ def main():
                                                               module.params['desired_count'],
                                                               clientToken,
                                                               role,
+                                                              deploymentController,
                                                               deploymentConfiguration,
                                                               module.params['placement_constraints'],
                                                               module.params['placement_strategy'],
@@ -791,12 +1049,18 @@ def main():
                                                               network_configuration,
                                                               serviceRegistries,
                                                               module.params['launch_type'],
+                                                              module.params['scheduling_strategy'],
                                                               module.params['platform_version'],
-                                                              module.params['scheduling_strategy']
+                                                              module.params['scheduling_strategy'],
+                                                              capacityProviders,
+                                                              module.params['tags'],
+                                                              module.params['propagate_tags'],
                                                               )
                     except botocore.exceptions.ClientError as e:
                         module.fail_json_aws(e, msg="Couldn't create service")
 
+                if response.get('tags', None):
+                    response['tags'] = boto3_tag_list_to_ansible_dict(response['tags'])
                 results['service'] = response
 
             results['changed'] = True
@@ -820,8 +1084,24 @@ def main():
                             module.params['cluster'],
                             module.params['force_deletion'],
                         )
+
+                        # Wait for service to be INACTIVE prior to exiting
+                        if module.params['wait']:
+                            waiter = service_mgr.ecs.get_waiter('services_inactive')
+                            try:
+                                waiter.wait(
+                                    services=[module.params['name']],
+                                    cluster=module.params['cluster'],
+                                    WaiterConfig={
+                                        'Delay': module.params['delay'],
+                                        'MaxAttempts': module.params['repeat']
+                                    }
+                                )
+                            except botocore.exceptions.WaiterError as e:
+                                module.fail_json_aws(e, 'Timeout waiting for service removal')
                     except botocore.exceptions.ClientError as e:
                         module.fail_json_aws(e, msg="Couldn't delete service")
+
                 results['changed'] = True
 
     elif module.params['state'] == 'deleting':
@@ -841,7 +1121,10 @@ def main():
                 break
             time.sleep(delay)
         if i is repeat - 1:
-            module.fail_json(msg="Service still not deleted after " + str(repeat) + " tries of " + str(delay) + " seconds each.")
+            module.fail_json(
+                msg="Service still not deleted after {0} tries of {1} seconds each."
+                .format(repeat, delay)
+            )
             return
 
     module.exit_json(**results)

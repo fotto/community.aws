@@ -14,9 +14,9 @@ short_description: Manage RDS instances
 description:
     - Create, modify, and delete RDS instances.
 extends_documentation_fragment:
-- amazon.aws.aws
-- amazon.aws.ec2
-
+    - amazon.aws.aws
+    - amazon.aws.ec2
+    - amazon.aws.tags
 author:
     - Sloane Hertel (@s-hertel)
 
@@ -38,7 +38,7 @@ options:
         type: str
     force_update_password:
         description:
-          - Set to True to update your cluster password with I(master_user_password). Since comparing passwords to determine
+          - Set to C(True) to update your instance password with I(master_user_password). Since comparing passwords to determine
             if it needs to be updated is not possible this is set to False by default to allow idempotence.
         type: bool
         default: False
@@ -46,18 +46,14 @@ options:
         description: Set to False to retain any enabled cloudwatch logs that aren't specified in the task and are associated with the instance.
         type: bool
         default: True
-    purge_tags:
-        description: Set to False to retain any tags that aren't specified in task and are associated with the instance.
-        type: bool
-        default: True
     read_replica:
         description:
-          - Set to False to promote a read replica cluster or true to create one. When creating a read replica C(creation_source) should
+          - Set to C(False) to promote a read replica instance or true to create one. When creating a read replica C(creation_source) should
             be set to 'instance' or not provided. C(source_db_instance_identifier) must be provided with this option.
         type: bool
     wait:
         description:
-          - Whether to wait for the cluster to be available, stopped, or deleted. At a later time a wait_timeout option may be added.
+          - Whether to wait for the instance to be available, stopped, or deleted. At a later time a I(wait_timeout) option may be added.
             Following each API call to create/modify/delete the instance a waiter is used with a 60 second delay 30 times until the instance reaches
             the expected state (available/stopped/deleted). The total task time may also be influenced by AWSRetry which helps stabilize if the
             instance is in an invalid state to operate on to begin with (such as if you try to stop it when it is in the process of rebooting).
@@ -76,7 +72,7 @@ options:
         type: bool
     apply_immediately:
         description:
-          - A value that specifies whether modifying a cluster with I(new_db_instance_identifier) and I(master_user_password)
+          - A value that specifies whether modifying an instance with I(new_db_instance_identifier) and I(master_user_password)
             should be applied as soon as possible, regardless of the I(preferred_maintenance_window) setting. If false, changes
             are applied during the next maintenance window.
         type: bool
@@ -87,8 +83,8 @@ options:
         type: bool
     availability_zone:
         description:
-          - A list of EC2 Availability Zones that instances in the DB cluster can be created in.
-            May be used when creating a cluster or when restoring from S3 or a snapshot. Mutually exclusive with I(multi_az).
+          - A list of EC2 Availability Zones that the DB instance can be created in.
+            May be used when creating an instance or when restoring from S3 or a snapshot. Mutually exclusive with I(multi_az).
         aliases:
           - az
           - zone
@@ -97,7 +93,7 @@ options:
         description:
           - The number of days for which automated backups are retained.
           - When set to C(0), automated backups will be disabled. (Not applicable if the DB instance is a source to read replicas)
-          - May be used when creating a new cluster, when restoring from S3, or when modifying a cluster.
+          - May be used when creating a new instance, when restoring from S3, or when modifying an instance.
         type: int
     ca_certificate_identifier:
         description:
@@ -105,7 +101,7 @@ options:
         type: str
     character_set_name:
         description:
-          - The character set to associate with the DB cluster.
+          - The character set to associate with the DB instance.
         type: str
     copy_tags_to_snapshot:
         description:
@@ -152,14 +148,24 @@ options:
         elements: str
     db_snapshot_identifier:
         description:
-          - The identifier for the DB snapshot to restore from if using I(creation_source=snapshot).
+          - The identifier or ARN of the DB snapshot to restore from when using I(creation_source=snapshot).
         type: str
+        aliases:
+          - snapshot_identifier
+          - snapshot_id
     db_subnet_group_name:
         description:
           - The DB subnet group name to use for the DB instance.
         aliases:
           - subnet_group
         type: str
+    deletion_protection:
+        description:
+          -  A value that indicates whether the DB instance has deletion protection enabled.
+             The database can't be deleted when deletion protection is enabled.
+             By default, deletion protection is disabled.
+        type: bool
+        version_added: 3.3.0
     domain:
         description:
           - The Active Directory Domain to restore the instance in.
@@ -178,7 +184,7 @@ options:
     enable_iam_database_authentication:
         description:
           - Enable mapping of AWS Identity and Access Management (IAM) accounts to database accounts.
-            If this option is omitted when creating the cluster, Amazon RDS sets this to False.
+            If this option is omitted when creating the instance, Amazon RDS sets this to False.
         type: bool
     enable_performance_insights:
         description:
@@ -187,8 +193,8 @@ options:
     engine:
         description:
           - The name of the database engine to be used for this DB instance. This is required to create an instance.
-            Valid choices are aurora | aurora-mysql | aurora-postgresql | mariadb | mysql | oracle-ee | oracle-se |
-            oracle-se1 | oracle-se2 | postgres | sqlserver-ee | sqlserver-ex | sqlserver-se | sqlserver-web
+        choices: ['aurora', 'aurora-mysql', 'aurora-postgresql', 'mariadb', 'mysql', 'oracle-ee', 'oracle-ee-cdb',
+                  'oracle-se2', 'oracle-se2-cdb', 'postgres', 'sqlserver-ee', 'sqlserver-se', 'sqlserver-ex', 'sqlserver-web']
         type: str
     engine_version:
         description:
@@ -205,6 +211,23 @@ options:
         description:
           - Set to true to conduct the reboot through a MultiAZ failover.
         type: bool
+    iam_roles:
+        description:
+          - List of Amazon Web Services Identity and Access Management (IAM) roles to associate with DB instance.
+        type: list
+        elements: dict
+        suboptions:
+          feature_name:
+            description:
+              - The name of the feature associated with the IAM role.
+            type: str
+            required: yes
+          role_arn:
+            description:
+              - The ARN of the IAM role to associate with the DB instance.
+            type: str
+            required: yes
+        version_added: 3.3.0
     iops:
         description:
           - The Provisioned IOPS (I/O operations per second) value. Is only set when using I(storage_type) is set to io1.
@@ -225,14 +248,14 @@ options:
     master_user_password:
         description:
           - An 8-41 character password for the master database user. The password can contain any printable ASCII character
-            except "/", """, or "@". To modify the password use I(force_password_update). Use I(apply immediately) to change
+            except "/", """, or "@". To modify the password use I(force_update_password). Use I(apply immediately) to change
             the password immediately, otherwise it is updated during the next maintenance window.
         aliases:
           - password
         type: str
     master_username:
         description:
-          - The name of the master user for the DB cluster. Must be 1-16 letters or numbers and begin with a letter.
+          - The name of the master user for the DB instance. Must be 1-16 letters or numbers and begin with a letter.
         aliases:
           - username
         type: str
@@ -255,7 +278,7 @@ options:
         type: bool
     new_db_instance_identifier:
         description:
-          - The new DB cluster (lowercase) identifier for the DB cluster when renaming a DB instance. The identifier must contain
+          - The new DB instance (lowercase) identifier for the DB instance when renaming a DB instance. The identifier must contain
             from 1 to 63 letters, numbers, or hyphens and the first character must be a letter and may not end in a hyphen or
             contain consecutive hyphens. Use I(apply_immediately) to rename immediately, otherwise it is updated during the
             next maintenance window.
@@ -316,6 +339,12 @@ options:
             a publicly resolvable DNS name, which resolves to a public IP address. A value of false specifies an internal
             instance with a DNS name that resolves to a private IP address.
         type: bool
+    purge_iam_roles:
+        description:
+          - Set to C(True) to remove any IAM roles that aren't specified in the task and are associated with the instance.
+        type: bool
+        default: False
+        version_added: 3.3.0
     restore_time:
         description:
           - If using I(creation_source=instance) this indicates the UTC date and time to restore from the source instance.
@@ -339,14 +368,10 @@ options:
         type: str
     skip_final_snapshot:
         description:
-          - Whether a final DB cluster snapshot is created before the DB cluster is deleted. If this is false I(final_db_snapshot_identifier)
+          - Whether a final DB instance snapshot is created before the DB instance is deleted. If this is false I(final_db_snapshot_identifier)
             must be provided.
         type: bool
         default: false
-    snapshot_identifier:
-        description:
-          - The ARN of the DB snapshot to restore from when using I(creation_source=snapshot).
-        type: str
     source_db_instance_identifier:
         description:
           - The identifier or ARN of the source DB instance from which to restore when creating a read replica or spinning up a point-in-time
@@ -378,10 +403,6 @@ options:
           - gp2
           - io1
         type: str
-    tags:
-        description:
-          - A dictionary of key value pairs to assign the DB cluster.
-        type: dict
     tde_credential_arn:
         description:
           - The ARN from the key store with which to associate the instance for Transparent Data Encryption. This is
@@ -409,7 +430,7 @@ options:
           - restore_from_latest
     vpc_security_group_ids:
         description:
-          - A list of EC2 VPC security groups to associate with the DB cluster.
+          - A list of EC2 VPC security groups to associate with the DB instance.
         type: list
         elements: str
     purge_security_groups:
@@ -462,15 +483,74 @@ EXAMPLES = r'''
     vpc_security_group_ids:
       - sg-0be17ba10c9286b0b
     purge_security_groups: false
-    register: result
+  register: result
+
+# Add IAM role to db instance
+- name: Create IAM policy
+  community.aws.iam_managed_policy:
+    policy_name: "my-policy"
+    policy: "{{ lookup('file','files/policy.json') }}"
+    state: present
+  register: iam_policy
+
+- name: Create IAM role
+  community.aws.iam_role:
+    assume_role_policy_document: "{{ lookup('file','files/assume_policy.json') }}"
+    name: "my-role"
+    state: present
+    managed_policy: "{{ iam_policy.policy.arn }}"
+  register: iam_role
+
+- name: Create DB instance with added IAM role
+  community.aws.rds_instance:
+    id: "my-instance-id"
+    state: present
+    engine: postgres
+    engine_version: 14.2
+    username: "{{ username }}"
+    password: "{{ password }}"
+    db_instance_class: db.m6g.large
+    allocated_storage: "{{ allocated_storage }}"
+    iam_roles:
+      - role_arn: "{{ iam_role.arn }}"
+        feature_name: 's3Export'
+
+- name: Remove IAM role from DB instance
+  community.aws.rds_instance:
+    id: "my-instance-id"
+    state: present
+    purge_iam_roles: yes
+
+# Restore DB instance from snapshot
+- name: Create a snapshot and wait until completion
+  community.aws.rds_instance_snapshot:
+    instance_id: 'my-instance-id'
+    snapshot_id: 'my-new-snapshot'
+    state: present
+    wait: yes
+  register: snapshot
+
+- name: Restore DB from snapshot
+  community.aws.rds_instance:
+    id: 'my-restored-db'
+    creation_source: snapshot
+    snapshot_identifier: 'my-new-snapshot'
+    engine: mariadb
+    state: present
+  register: restored_db
 '''
 
 RETURN = r'''
 allocated_storage:
-  description: The allocated storage size in gibibytes. This is always 1 for aurora database engines.
+  description: The allocated storage size in gigabytes. This is always 1 for aurora database engines.
   returned: always
   type: int
   sample: 20
+associated_roles:
+  description: The list of currently associated roles.
+  returned: always
+  type: list
+  sample: []
 auto_minor_version_upgrade:
   description: Whether minor engine upgrades are applied automatically to the DB instance during the maintenance window.
   returned: always
@@ -596,6 +676,12 @@ dbi_resource_id:
   returned: always
   type: str
   sample: db-UHV3QRNWX4KB6GALCIGRML6QFA
+deletion_protection:
+  description: C(True) if the DB instance has deletion protection enabled, C(False) if not.
+  returned: always
+  type: bool
+  sample: False
+  version_added: 3.3.0
 domain_memberships:
   description: The Active Directory Domain membership records associated with the DB instance.
   returned: always
@@ -775,12 +861,22 @@ from ansible_collections.amazon.aws.plugins.module_utils.core import is_boto3_er
 from ansible_collections.amazon.aws.plugins.module_utils.core import get_boto3_client_method_parameters
 from ansible_collections.amazon.aws.plugins.module_utils.ec2 import ansible_dict_to_boto3_tag_list
 from ansible_collections.amazon.aws.plugins.module_utils.ec2 import AWSRetry
+from ansible_collections.amazon.aws.plugins.module_utils.ec2 import boto3_tag_list_to_ansible_dict
 from ansible_collections.amazon.aws.plugins.module_utils.rds import arg_spec_to_rds_params
 from ansible_collections.amazon.aws.plugins.module_utils.rds import call_method
+from ansible_collections.amazon.aws.plugins.module_utils.rds import compare_iam_roles
 from ansible_collections.amazon.aws.plugins.module_utils.rds import ensure_tags
 from ansible_collections.amazon.aws.plugins.module_utils.rds import get_final_identifier
 from ansible_collections.amazon.aws.plugins.module_utils.rds import get_rds_method_attribute
 from ansible_collections.amazon.aws.plugins.module_utils.rds import get_tags
+from ansible_collections.amazon.aws.plugins.module_utils.rds import update_iam_roles
+
+
+valid_engines = ['aurora', 'aurora-mysql', 'aurora-postgresql', 'mariadb', 'mysql', 'oracle-ee', 'oracle-ee-cdb',
+                 'oracle-se2', 'oracle-se2-cdb', 'postgres', 'sqlserver-ee', 'sqlserver-se', 'sqlserver-ex', 'sqlserver-web']
+
+valid_engines_iam_roles = ['aurora-postgresql', 'oracle-ee', 'oracle-ee-cdb', 'oracle-se2', 'oracle-se2-cdb',
+                           'postgres', 'sqlserver-ee', 'sqlserver-se', 'sqlserver-ex', 'sqlserver-web']
 
 
 def get_rds_method_attribute_name(instance, state, creation_source, read_replica):
@@ -890,6 +986,17 @@ def get_options_with_changing_values(client, module, parameters):
     updated_parameters.update(get_changing_options_with_consistent_keys(parameters, instance))
     parameters = updated_parameters
 
+    if instance.get('StorageType') == 'io1':
+        # Bundle Iops and AllocatedStorage while updating io1 RDS Instance
+        current_iops = instance.get('PendingModifiedValues', {}).get('Iops', instance['Iops'])
+        current_allocated_storage = instance.get('PendingModifiedValues', {}).get('AllocatedStorage', instance['AllocatedStorage'])
+        new_iops = module.params.get('iops')
+        new_allocated_storage = module.params.get('allocated_storage')
+
+        if current_iops != new_iops or current_allocated_storage != new_allocated_storage:
+            parameters['AllocatedStorage'] = new_allocated_storage
+            parameters['Iops'] = new_iops
+
     if parameters.get('NewDBInstanceIdentifier') and instance.get('PendingModifiedValues', {}).get('DBInstanceIdentifier'):
         if parameters['NewDBInstanceIdentifier'] == instance['PendingModifiedValues']['DBInstanceIdentifier'] and not apply_immediately:
             parameters.pop('NewDBInstanceIdentifier')
@@ -926,12 +1033,14 @@ def get_current_attributes_with_inconsistent_keys(instance):
     options['DBSecurityGroups'] = [sg['DBSecurityGroupName'] for sg in instance['DBSecurityGroups'] if sg['Status'] in ['adding', 'active']]
     options['VpcSecurityGroupIds'] = [sg['VpcSecurityGroupId'] for sg in instance['VpcSecurityGroups'] if sg['Status'] in ['adding', 'active']]
     options['DBParameterGroupName'] = [parameter_group['DBParameterGroupName'] for parameter_group in instance['DBParameterGroups']]
-    options['AllowMajorVersionUpgrade'] = None
     options['EnableIAMDatabaseAuthentication'] = instance['IAMDatabaseAuthenticationEnabled']
     # PerformanceInsightsEnabled is not returned on older RDS instances it seems
     options['EnablePerformanceInsights'] = instance.get('PerformanceInsightsEnabled', False)
-    options['MasterUserPassword'] = None
     options['NewDBInstanceIdentifier'] = instance['DBInstanceIdentifier']
+
+    # Neither of these are returned via describe_db_instances, so if either is specified during a check_mode run, changed=True
+    options['AllowMajorVersionUpgrade'] = None
+    options['MasterUserPassword'] = None
 
     return options
 
@@ -939,10 +1048,6 @@ def get_current_attributes_with_inconsistent_keys(instance):
 def get_changing_options_with_inconsistent_keys(modify_params, instance, purge_cloudwatch_logs, purge_security_groups):
     changing_params = {}
     current_options = get_current_attributes_with_inconsistent_keys(instance)
-
-    if current_options.get("MaxAllocatedStorage") is None:
-        current_options["MaxAllocatedStorage"] = None
-
     for option in current_options:
         current_option = current_options[option]
         desired_option = modify_params.pop(option, None)
@@ -963,9 +1068,14 @@ def get_changing_options_with_inconsistent_keys(modify_params, instance, purge_c
                 if desired_option in current_option:
                     continue
 
-        if current_option == desired_option:
+        # Current option and desired option are the same - continue loop
+        if option != 'ProcessorFeatures' and current_option == desired_option:
             continue
 
+        if option == 'ProcessorFeatures' and current_option == boto3_tag_list_to_ansible_dict(desired_option, 'Name', 'Value'):
+            continue
+
+        # Current option and desired option are different - add to changing_params list
         if option == 'ProcessorFeatures' and desired_option == []:
             changing_params['UseDefaultProcessorFeatures'] = True
         elif option == 'CloudwatchLogsExportConfiguration':
@@ -1055,13 +1165,48 @@ def update_instance(client, module, instance, instance_id):
 def promote_replication_instance(client, module, instance, read_replica):
     changed = False
     if read_replica is False:
-        changed = bool(instance.get('ReadReplicaSourceDBInstanceIdentifier') or instance.get('StatusInfos'))
-    if changed:
-        try:
-            call_method(client, module, method_name='promote_read_replica', parameters={'DBInstanceIdentifier': instance['DBInstanceIdentifier']})
-            changed = True
-        except is_boto3_error_message('DB Instance is not a read replica'):
-            pass
+        # 'StatusInfos' only exists when the instance is a read replica
+        # See https://awscli.amazonaws.com/v2/documentation/api/latest/reference/rds/describe-db-instances.html
+        if bool(instance.get('StatusInfos')):
+            try:
+                result, changed = call_method(client, module, method_name='promote_read_replica',
+                                              parameters={'DBInstanceIdentifier': instance['DBInstanceIdentifier']})
+            except is_boto3_error_message('DB Instance is not a read replica'):
+                pass
+    return changed
+
+
+def ensure_iam_roles(client, module, instance_id):
+    '''
+    Ensure specified IAM roles are associated with DB instance
+
+        Parameters:
+            client: RDS client
+            module: AWSModule
+            instance_id: DB's instance ID
+
+        Returns:
+            changed (bool): True if changes were successfully made to DB instance's IAM roles; False if not
+    '''
+    instance = camel_dict_to_snake_dict(get_instance(client, module, instance_id), ignore_list=['Tags', 'ProcessorFeatures'])
+
+    # Ensure engine type supports associating IAM roles
+    engine = instance.get('engine')
+    if engine not in valid_engines_iam_roles:
+        module.fail_json(msg='DB engine {0} is not valid for adding IAM roles. Valid engines are {1}'.format(engine, valid_engines_iam_roles))
+
+    changed = False
+    purge_iam_roles = module.params.get('purge_iam_roles')
+    target_roles = module.params.get('iam_roles') if module.params.get('iam_roles') else []
+    existing_roles = instance.get('associated_roles', [])
+    roles_to_add, roles_to_remove = compare_iam_roles(existing_roles, target_roles, purge_iam_roles)
+    if bool(roles_to_add or roles_to_remove):
+        changed = True
+        # Don't update on check_mode
+        if module.check_mode:
+            module.exit_json(changed=changed, **instance)
+        else:
+            update_iam_roles(client, module, instance_id, roles_to_add, roles_to_remove)
     return changed
 
 
@@ -1102,6 +1247,7 @@ def main():
         creation_source=dict(choices=['snapshot', 's3', 'instance']),
         force_update_password=dict(type='bool', default=False, no_log=False),
         purge_cloudwatch_logs_exports=dict(type='bool', default=True),
+        purge_iam_roles=dict(type='bool', default=False),
         purge_tags=dict(type='bool', default=True),
         read_replica=dict(type='bool'),
         wait=dict(type='bool', default=True),
@@ -1124,17 +1270,19 @@ def main():
         db_name=dict(),
         db_parameter_group_name=dict(),
         db_security_groups=dict(type='list', elements='str'),
-        db_snapshot_identifier=dict(),
+        db_snapshot_identifier=dict(type='str', aliases=['snapshot_identifier', 'snapshot_id']),
         db_subnet_group_name=dict(aliases=['subnet_group']),
+        deletion_protection=dict(type='bool'),
         domain=dict(),
         domain_iam_role_name=dict(),
         enable_cloudwatch_logs_exports=dict(type='list', aliases=['cloudwatch_log_exports'], elements='str'),
         enable_iam_database_authentication=dict(type='bool'),
         enable_performance_insights=dict(type='bool'),
-        engine=dict(),
+        engine=dict(type='str', choices=valid_engines),
         engine_version=dict(),
         final_db_snapshot_identifier=dict(aliases=['final_snapshot_identifier']),
         force_failover=dict(type='bool'),
+        iam_roles=dict(type='list', elements='dict'),
         iops=dict(type='int'),
         kms_key_id=dict(),
         license_model=dict(),
@@ -1159,14 +1307,13 @@ def main():
         s3_ingestion_role_arn=dict(),
         s3_prefix=dict(),
         skip_final_snapshot=dict(type='bool', default=False),
-        snapshot_identifier=dict(),
         source_db_instance_identifier=dict(),
         source_engine=dict(choices=['mysql']),
         source_engine_version=dict(),
         source_region=dict(),
         storage_encrypted=dict(type='bool'),
         storage_type=dict(choices=['standard', 'gp2', 'io1']),
-        tags=dict(type='dict'),
+        tags=dict(type='dict', aliases=['resource_tags']),
         tde_credential_arn=dict(aliases=['transparent_data_encryption_arn']),
         tde_credential_password=dict(no_log=True, aliases=['transparent_data_encryption_password']),
         timezone=dict(),
@@ -1179,13 +1326,14 @@ def main():
         ('engine', 'aurora', ('db_cluster_identifier',)),
         ('engine', 'aurora-mysql', ('db_cluster_identifier',)),
         ('engine', 'aurora-postresql', ('db_cluster_identifier',)),
-        ('creation_source', 'snapshot', ('snapshot_identifier', 'engine')),
+        ('storage_type', 'io1', ('iops', 'allocated_storage')),
+        ('creation_source', 'snapshot', ('db_snapshot_identifier', 'engine')),
         ('creation_source', 's3', (
             's3_bucket_name', 'engine', 'master_username', 'master_user_password',
             'source_engine', 'source_engine_version', 's3_ingestion_role_arn')),
     ]
     mutually_exclusive = [
-        ('s3_bucket_name', 'source_db_instance_identifier', 'snapshot_identifier'),
+        ('s3_bucket_name', 'source_db_instance_identifier', 'db_snapshot_identifier'),
         ('use_latest_restorable_time', 'restore_time'),
         ('availability_zone', 'multi_az'),
     ]
@@ -1210,6 +1358,13 @@ def main():
     if module.params['preferred_maintenance_window']:
         module.params['preferred_maintenance_window'] = module.params['preferred_maintenance_window'].lower()
 
+    # Throw warning regarding case when allow_major_version_upgrade is specified in check_mode
+    # describe_rds_instance never returns this value, so on check_mode, it will always return changed=True
+    # In non-check mode runs, changed will return the correct value, so no need to warn there.
+    # see: amazon.aws.module_util.rds.handle_errors.
+    if module.params.get('allow_major_version_upgrade') and module.check_mode:
+        module.warn('allow_major_version_upgrade is not returned when describing db instances, so changed will always be `True` on check mode runs.')
+
     client = module.client('rds')
     changed = False
     state = module.params['state']
@@ -1219,17 +1374,30 @@ def main():
     method_name = get_rds_method_attribute_name(instance, state, module.params['creation_source'], module.params['read_replica'])
 
     if method_name:
-        raw_parameters = arg_spec_to_rds_params(dict((k, module.params[k]) for k in module.params if k in parameter_options))
-        parameters = get_parameters(client, module, raw_parameters, method_name)
 
-        if parameters:
-            result, changed = call_method(client, module, method_name, parameters)
+        # Exit on create/delete if check_mode
+        if module.check_mode and method_name in ['create_db_instance', 'delete_db_instance']:
+            module.exit_json(changed=True, **camel_dict_to_snake_dict(instance, ignore_list=['Tags', 'ProcessorFeatures']))
+
+        raw_parameters = arg_spec_to_rds_params(dict((k, module.params[k]) for k in module.params if k in parameter_options))
+        parameters_to_modify = get_parameters(client, module, raw_parameters, method_name)
+
+        if parameters_to_modify:
+            # Exit on check_mode when parameters to modify
+            if module.check_mode:
+                module.exit_json(changed=True, **camel_dict_to_snake_dict(instance, ignore_list=['Tags', 'ProcessorFeatures']))
+            result, changed = call_method(client, module, method_name, parameters_to_modify)
 
         instance_id = get_final_identifier(method_name, module)
 
-        # Check tagging/promoting/rebooting/starting/stopping instance
-        if state != 'absent' and (not module.check_mode or instance):
-            changed |= update_instance(client, module, instance, instance_id)
+        if state != 'absent':
+            # Check tagging/promoting/rebooting/starting/stopping instance
+            if not module.check_mode or instance:
+                changed |= update_instance(client, module, instance, instance_id)
+
+            # Check IAM roles
+            if module.params.get('iam_roles') or module.params.get('purge_iam_roles'):
+                changed |= ensure_iam_roles(client, module, instance_id)
 
         if changed:
             instance = get_instance(client, module, instance_id)
